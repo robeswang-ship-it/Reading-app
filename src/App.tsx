@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import ReaderPage from './ReaderPage';
+import AuthPage from './components/AuthPage';
 import DocumentLibrary from './components/DocumentLibrary';
 import FavoritesPage from './components/FavoritesPage';
 import ReviewSentencesPage from './components/ReviewSentencesPage';
@@ -8,6 +10,7 @@ import TextImporter from './components/TextImporter';
 import VocabularyPage from './components/VocabularyPage';
 import type { Document, Folder, Sentence } from './types';
 import { splitIntoSentences } from './utils/sentenceSplitter';
+import { supabase } from './services/supabaseClient';
 import {
   deleteDocument,
   generateDocumentId,
@@ -37,6 +40,23 @@ function App() {
   const [documents, setDocuments] = useState<Document[]>(() => getDocuments());
   const [folders, setFolders] = useState<Folder[]>(() => getFolders());
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setIsAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const refreshLibrary = () => {
     setDocuments(getDocuments());
@@ -87,6 +107,24 @@ function App() {
     setRoute('library');
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setActiveDocument(null);
+    setRoute('library');
+  };
+
+  if (isAuthLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600">
+        <p className="text-sm font-medium">Loading...</p>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return <AuthPage />;
+  }
+
   if (route === 'create') {
     return (
       <TextImporter
@@ -130,8 +168,10 @@ function App() {
     <DocumentLibrary
       documents={documents}
       folders={folders}
+      userEmail={session.user.email ?? ''}
       onCreateDocument={() => setRoute('create')}
       onDeleteDocument={handleDeleteDocument}
+      onLogout={handleLogout}
       onLibraryChange={refreshLibrary}
       onOpenDocument={handleOpenDocument}
       onOpenFavorites={() => setRoute('favorites')}

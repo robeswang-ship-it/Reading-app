@@ -11,8 +11,9 @@ A React + TypeScript + Vite + Tailwind CSS English intensive reading app with a 
 - Continuous full-text reader with extensive and intensive modes
 - Vocabulary book, favorite sentences, and review pages
 - Import/export library JSON and batch TXT import
+- Supabase email/password authentication
 - Optional DeepSeek sentence and word analysis
-- No backend and no authentication
+- No database tables or cloud sync yet
 
 ## Environment Variables
 
@@ -22,13 +23,20 @@ Create a local `.env` file from `.env.example`:
 cp .env.example .env
 ```
 
+Set the required Supabase Auth variables:
+
+```text
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
 Set the optional DeepSeek API key:
 
 ```text
 VITE_DEEPSEEK_API_KEY=your_deepseek_api_key
 ```
 
-If this variable is empty, the app falls back to mock AI responses.
+If `VITE_DEEPSEEK_API_KEY` is empty, the app falls back to mock AI responses.
 
 ## Data Storage
 
@@ -58,14 +66,15 @@ position.
    cp .env.example .env
    ```
 
-4. Add `VITE_DEEPSEEK_API_KEY` in `.env` if you want real DeepSeek analysis.
-5. Start the development server:
+4. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env`.
+5. Add `VITE_DEEPSEEK_API_KEY` if you want real DeepSeek analysis.
+6. Start the development server:
 
    ```bash
    npm run dev
    ```
 
-6. Open the local URL printed by Vite, usually:
+7. Open the local URL printed by Vite, usually:
 
    ```text
    http://localhost:5173
@@ -91,13 +100,16 @@ npm run preview
    - Framework Preset: `Vite`
    - Build Command: `npm run build`
    - Output Directory: `dist`
-4. In Vercel Project Settings, add the environment variable:
+4. In Vercel Project Settings, add the environment variables:
 
    ```text
+   VITE_SUPABASE_URL
+   VITE_SUPABASE_ANON_KEY
    VITE_DEEPSEEK_API_KEY
    ```
 
 5. Deploy.
 
-The app is frontend-only. User library data is stored in each browser's
-`localStorage`, so deployments do not require a database or server.
+The app is frontend-only. Supabase is used for authentication only right now.
+User library data is still stored in each browser's `localStorage`, so this
+deployment does not require database tables or cloud sync.

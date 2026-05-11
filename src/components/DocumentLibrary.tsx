@@ -23,8 +23,10 @@ type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
 type DocumentLibraryProps = {
   documents: Document[];
   folders: Folder[];
+  userEmail: string;
   onCreateDocument: () => void;
   onDeleteDocument: (id: string) => void;
+  onLogout: () => void;
   onLibraryChange: () => void;
   onOpenDocument: (document: Document) => void;
   onOpenFavorites: () => void;
@@ -101,8 +103,10 @@ function getProgress(document: Document) {
 function DocumentLibrary({
   documents,
   folders,
+  userEmail,
   onCreateDocument,
   onDeleteDocument,
+  onLogout,
   onLibraryChange,
   onOpenDocument,
   onOpenFavorites,
@@ -328,6 +332,9 @@ function DocumentLibrary({
               Organize local reading documents, collect useful words, and save
               favorite sentences.
             </p>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Signed in as {userEmail}
+            </p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
@@ -386,6 +393,13 @@ function DocumentLibrary({
               className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             >
               Review Sentences
+            </button>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+            >
+              Logout
             </button>
           </div>
         </header>
