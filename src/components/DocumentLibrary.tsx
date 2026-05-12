@@ -1,6 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { Document, Folder } from '../types';
+import { cleanExtractedPdfText } from '../services/aiService';
+import {
+  parseDocxFile,
+  parsePdfFile,
+  parseTxtFile,
+} from '../utils/fileParsers';
 import { splitIntoSentences } from '../utils/sentenceSplitter';
 import {
   createFolder,
@@ -63,8 +69,30 @@ function downloadJsonFile(fileName: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
-function getTitleFromTxtFile(file: File) {
-  return file.name.replace(/\.txt$/i, '').trim() || 'Untitled Document';
+function getTitleFromImportedFile(file: File) {
+  return file.name.replace(/\.[^.]+$/i, '').trim() || 'Untitled Document';
+}
+
+function getImportFileType(file: File) {
+  const fileName = file.name.toLowerCase();
+
+  if (fileName.endsWith('.txt')) {
+    return 'txt';
+  }
+
+  if (fileName.endsWith('.docx')) {
+    return 'docx';
+  }
+
+  if (fileName.endsWith('.pdf')) {
+    return 'pdf';
+  }
+
+  return 'unsupported';
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Import failed';
 }
 
 function getFolderName(folders: Folder[], folderId?: string) {
@@ -115,7 +143,7 @@ function DocumentLibrary({
   onReviewVocabulary,
 }: DocumentLibraryProps) {
   const libraryInputRef = useRef<HTMLInputElement>(null);
-  const txtInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const [selectedFolder, setSelectedFolder] = useState<FolderView>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('newest');
@@ -257,7 +285,7 @@ function DocumentLibrary({
     }
   };
 
-  const handleImportTxtFiles = async (
+  const handleImportDocumentFiles = async (
     event: ChangeEvent<HTMLInputElement>,
   ) => {
     const files = Array.from(event.target.files ?? []);
@@ -268,53 +296,74 @@ function DocumentLibrary({
     }
 
     const importedDocuments: Document[] = [];
-    let failedCount = 0;
+    const failedFiles: string[] = [];
 
-    await Promise.all(
-      files.map(async (file) => {
-        try {
-          const sourceText = await file.text();
-          const sentences = splitIntoSentences(sourceText).map((text) => ({
-            id: generateDocumentId(),
-            text,
-          }));
+    for (const file of files) {
+      try {
+        const fileType = getImportFileType(file);
+        let sourceText = '';
 
-          if (sentences.length === 0) {
-            failedCount += 1;
-            return;
-          }
+        if (fileType === 'unsupported') {
+          throw new Error('Unsupported file type');
+        }
 
-          importedDocuments.push({
-            id: generateDocumentId(),
-            title: getTitleFromTxtFile(file),
-            createdAt: new Date().toISOString(),
-            sourceText,
-            sentences,
-            currentSentenceIndex: 0,
-            folderId: selectedFolder === 'all' || selectedFolder === 'unfiled'
+        showStatus('success', `Parsing file... ${file.name}`);
+
+        if (fileType === 'txt') {
+          sourceText = await parseTxtFile(file);
+        } else if (fileType === 'docx') {
+          sourceText = await parseDocxFile(file);
+        } else {
+          const rawPdfText = await parsePdfFile(file);
+          showStatus('success', `Cleaning PDF text with AI... ${file.name}`);
+          sourceText = await cleanExtractedPdfText(rawPdfText);
+        }
+
+        const sentences = splitIntoSentences(sourceText).map((text) => ({
+          id: generateDocumentId(),
+          text,
+        }));
+
+        if (sentences.length === 0) {
+          throw new Error('No readable English text found');
+        }
+
+        importedDocuments.push({
+          id: generateDocumentId(),
+          title: getTitleFromImportedFile(file),
+          createdAt: new Date().toISOString(),
+          sourceText,
+          sentences,
+          currentSentenceIndex: 0,
+          folderId:
+            selectedFolder === 'all' || selectedFolder === 'unfiled'
               ? undefined
               : selectedFolder,
-          });
-        } catch {
-          failedCount += 1;
-        }
-      }),
-    );
+        });
+      } catch (error) {
+        failedFiles.push(`${file.name} (${getErrorMessage(error)})`);
+      }
+    }
 
     if (importedDocuments.length > 0) {
       importDocuments(importedDocuments);
       onLibraryChange();
     }
 
-    if (failedCount > 0) {
+    if (failedFiles.length > 0) {
       showStatus(
         importedDocuments.length > 0 ? 'success' : 'error',
-        `Imported ${importedDocuments.length} TXT file(s). ${failedCount} file(s) failed.`,
+        `Imported ${importedDocuments.length} files successfully. Failed: ${failedFiles.join(
+          ', ',
+        )}`,
       );
       return;
     }
 
-    showStatus('success', `Imported ${importedDocuments.length} TXT file(s).`);
+    showStatus(
+      'success',
+      `Imported ${importedDocuments.length} files successfully.`,
+    );
   };
 
   return (
@@ -361,10 +410,10 @@ function DocumentLibrary({
             </button>
             <button
               type="button"
-              onClick={() => txtInputRef.current?.click()}
+              onClick={() => documentInputRef.current?.click()}
               className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             >
-              Import TXT Files
+              Import TXT / DOCX / PDF Files
             </button>
             <button
               type="button"
@@ -402,6 +451,10 @@ function DocumentLibrary({
               Logout
             </button>
           </div>
+          <p className="text-sm text-slate-500 lg:text-right">
+            PDF import works best with selectable-text PDFs. Scanned PDFs are
+            not supported yet.
+          </p>
         </header>
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -678,12 +731,12 @@ function DocumentLibrary({
           onChange={handleImportLibrary}
         />
         <input
-          ref={txtInputRef}
+          ref={documentInputRef}
           type="file"
-          accept="text/plain,.txt"
+          accept="text/plain,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf"
           multiple
           className="hidden"
-          onChange={handleImportTxtFiles}
+          onChange={handleImportDocumentFiles}
         />
       </div>
     </main>

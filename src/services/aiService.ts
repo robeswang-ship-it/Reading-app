@@ -19,6 +19,7 @@ type DeepSeekResponse = {
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_MODEL = 'deepseek-chat';
+const PDF_CLEANUP_CHUNK_SIZE = 12_000;
 
 function delay(ms: number) {
   return new Promise((resolve) => {
@@ -60,6 +61,46 @@ function mockWordLookup(word: string): WordLookup {
     phonetic: '/mock/',
     example: `This is a mock example sentence using "${word}".`,
   };
+}
+
+function chunkText(text: string, maxChunkSize: number) {
+  const chunks: string[] = [];
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  let currentChunk = '';
+
+  for (const paragraph of paragraphs) {
+    if (paragraph.length > maxChunkSize) {
+      if (currentChunk) {
+        chunks.push(currentChunk);
+        currentChunk = '';
+      }
+
+      for (let index = 0; index < paragraph.length; index += maxChunkSize) {
+        chunks.push(paragraph.slice(index, index + maxChunkSize));
+      }
+      continue;
+    }
+
+    const nextChunk = currentChunk
+      ? `${currentChunk}\n\n${paragraph}`
+      : paragraph;
+
+    if (nextChunk.length > maxChunkSize) {
+      chunks.push(currentChunk);
+      currentChunk = paragraph;
+    } else {
+      currentChunk = nextChunk;
+    }
+  }
+
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
 }
 
 async function callDeepSeek(content: string) {
@@ -209,5 +250,47 @@ Rules:
   } catch {
     await delay(500);
     return mockWordLookup(word);
+  }
+}
+
+export async function cleanExtractedPdfText(rawText: string): Promise<string> {
+  const trimmedText = rawText.trim();
+
+  if (!trimmedText) {
+    return rawText;
+  }
+
+  const chunks = chunkText(trimmedText, PDF_CLEANUP_CHUNK_SIZE);
+  const cleanedChunks: string[] = [];
+
+  try {
+    for (const chunk of chunks) {
+      const prompt = `You clean text extracted from an English PDF for an intensive reading app.
+
+Clean the following extracted PDF text.
+
+Rules:
+- Remove broken line breaks and restore natural paragraph flow.
+- Remove obvious repeated headers, footers, and page numbers.
+- Preserve the original English content.
+- Do not summarize.
+- Do not translate.
+- Return cleaned English text only.
+
+Extracted text:
+${chunk}`;
+
+      const cleanedChunk = await callDeepSeek(prompt);
+
+      if (!cleanedChunk?.trim()) {
+        throw new Error('PDF cleanup failed');
+      }
+
+      cleanedChunks.push(cleanedChunk.trim());
+    }
+
+    return cleanedChunks.join('\n\n').trim() || rawText;
+  } catch {
+    return rawText;
   }
 }
