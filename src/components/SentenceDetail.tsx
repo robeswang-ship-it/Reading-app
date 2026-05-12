@@ -57,7 +57,7 @@ function SentenceDetail({
   };
 
   return (
-    <article className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm lg:max-h-[calc(100vh-150px)] lg:overflow-y-auto">
+    <article className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm lg:sticky lg:top-36 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto">
       <div className="border-b border-slate-200 px-5 py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-sm font-semibold text-slate-900">

@@ -198,7 +198,7 @@ function WordPanel({
   }
 
   return (
-    <aside className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm lg:max-h-[calc(100vh-150px)] lg:overflow-y-auto">
+    <aside className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm lg:sticky lg:top-36 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto">
       <div className="border-b border-slate-200 px-5 py-4">
         <h2 className="text-sm font-semibold text-slate-900">Word panel</h2>
       </div>
