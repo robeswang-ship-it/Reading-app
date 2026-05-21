@@ -1,9 +1,21 @@
 type SentenceAnalysis = {
   translation: string;
   grammar: string;
+  keyPhrases: Array<{
+    phrase: string;
+    explanation: string;
+  }>;
+  advancedVocabulary: Array<{
+    word: string;
+    meaning: string;
+    explanation: string;
+  }>;
 };
 
 type WordLookup = {
+  chineseMeaning: string;
+  partOfSpeech: string;
+  englishExplanation: string;
   meaning: string;
   phonetic: string;
   example: string;
@@ -52,12 +64,28 @@ function mockSentenceAnalysis(sentence: string): SentenceAnalysis {
     translation: `模拟翻译：${sentence}`,
     grammar:
       '模拟语法解析：这里会用中文说明主句结构、从句关系、重点短语和理解难点。',
+    keyPhrases: [
+      {
+        phrase: 'mock key phrase',
+        explanation: '模拟重点短语解释',
+      },
+    ],
+    advancedVocabulary: [
+      {
+        word: 'intensive',
+        meaning: '深入的；密集的',
+        explanation: '常用于描述需要高度专注或投入的学习与训练。',
+      },
+    ],
   };
 }
 
 function mockWordLookup(word: string): WordLookup {
   return {
-    meaning: `Mock meaning for "${word}".`,
+    chineseMeaning: `模拟中文释义："${word}"`,
+    partOfSpeech: 'noun',
+    englishExplanation: `A mock learner-friendly explanation for "${word}".`,
+    meaning: `模拟中文释义："${word}"`,
     phonetic: '/mock/',
     example: `This is a mock example sentence using "${word}".`,
   };
@@ -136,13 +164,37 @@ async function callDeepSeek(content: string) {
 }
 
 function isSentenceAnalysis(value: unknown): value is SentenceAnalysis {
+  const record = value as Record<string, unknown>;
+
   return (
     typeof value === 'object' &&
     value !== null &&
-    'translation' in value &&
-    'grammar' in value &&
-    typeof value.translation === 'string' &&
-    typeof value.grammar === 'string'
+    typeof record.translation === 'string' &&
+    typeof record.grammar === 'string' &&
+    (record.keyPhrases === undefined ||
+      (Array.isArray(record.keyPhrases) &&
+        record.keyPhrases.every(
+          (item) =>
+            typeof item === 'object' &&
+            item !== null &&
+            'phrase' in item &&
+            'explanation' in item &&
+            typeof item.phrase === 'string' &&
+            typeof item.explanation === 'string',
+        ))) &&
+    (record.advancedVocabulary === undefined ||
+      (Array.isArray(record.advancedVocabulary) &&
+        record.advancedVocabulary.every(
+          (item) =>
+            typeof item === 'object' &&
+            item !== null &&
+            'word' in item &&
+            'meaning' in item &&
+            'explanation' in item &&
+            typeof item.word === 'string' &&
+            typeof item.meaning === 'string' &&
+            typeof item.explanation === 'string',
+        )))
   );
 }
 
@@ -150,10 +202,14 @@ function isWordLookup(value: unknown): value is WordLookup {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'meaning' in value &&
+    'chineseMeaning' in value &&
+    'partOfSpeech' in value &&
+    'englishExplanation' in value &&
     'phonetic' in value &&
     'example' in value &&
-    typeof value.meaning === 'string' &&
+    typeof value.chineseMeaning === 'string' &&
+    typeof value.partOfSpeech === 'string' &&
+    typeof value.englishExplanation === 'string' &&
     typeof value.phonetic === 'string' &&
     typeof value.example === 'string'
   );
@@ -172,12 +228,28 @@ Sentence:
 Return valid JSON only:
 {
   "translation": "自然流畅的中文翻译",
-  "grammar": "用中文解释这个句子的语法结构、从句关系、重点短语和理解难点"
+  "grammar": "用中文解释这个句子的语法结构、从句关系和理解难点",
+  "keyPhrases": [
+    {
+      "phrase": "原句中的动词短语、介词短语、搭配或实用语块",
+      "explanation": "中文解释"
+    }
+  ],
+  "advancedVocabulary": [
+    {
+      "word": "难词或高级表达",
+      "meaning": "中文含义",
+      "explanation": "中文简短说明"
+    }
+  ]
 }
 
 Rules:
 - The translation must be Chinese.
 - The grammar explanation must be written entirely in Chinese.
+- Extract 2-5 key phrases when available. Return [] if none.
+- Extract 1-5 advanced vocabulary items when available. Return [] if none.
+- Phrase and vocabulary explanations must be written in Chinese.
 - Do not explain in English.
 - Keep the grammar explanation clear and concise.
 - No extra text outside JSON.
@@ -194,12 +266,19 @@ Rules:
     const parsedContent: unknown = safeParseJSON(rawContent);
 
     if (isSentenceAnalysis(parsedContent)) {
-      return parsedContent;
+      return {
+        translation: parsedContent.translation,
+        grammar: parsedContent.grammar,
+        keyPhrases: parsedContent.keyPhrases ?? [],
+        advancedVocabulary: parsedContent.advancedVocabulary ?? [],
+      };
     }
 
     return {
       translation: rawContent,
       grammar: '解析失败，请重试',
+      keyPhrases: [],
+      advancedVocabulary: [],
     };
   } catch {
     await delay(700);
@@ -217,14 +296,18 @@ Word:
 
 Return valid JSON only:
 {
-  "meaning": "...",
-  "phonetic": "...",
-  "example": "..."
+  "chineseMeaning": "中文释义",
+  "partOfSpeech": "part of speech, e.g. noun / verb / adjective",
+  "englishExplanation": "learner-friendly English explanation",
+  "phonetic": "/phonetic/",
+  "example": "natural English example sentence"
 }
 
 Rules:
 - No extra text
-- Keep explanation simple
+- Chinese meaning must be written in Chinese
+- English explanation must be written in English
+- Keep explanation simple and useful
 - Example should be a natural English sentence
 `;
 
@@ -239,10 +322,16 @@ Rules:
     const parsedContent: unknown = safeParseJSON(rawContent);
 
     if (isWordLookup(parsedContent)) {
-      return parsedContent;
+      return {
+        ...parsedContent,
+        meaning: parsedContent.chineseMeaning,
+      };
     }
 
     return {
+      chineseMeaning: rawContent,
+      partOfSpeech: '解析失败',
+      englishExplanation: 'Parsing failed. Please try again.',
       meaning: rawContent,
       phonetic: '/解析失败/',
       example: '解析失败，请重试',
@@ -271,6 +360,7 @@ Clean the following extracted PDF text.
 
 Rules:
 - Remove broken line breaks and restore natural paragraph flow.
+- Preserve natural paragraph breaks with a blank line between paragraphs.
 - Remove obvious repeated headers, footers, and page numbers.
 - Preserve the original English content.
 - Do not summarize.

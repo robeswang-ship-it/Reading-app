@@ -3,8 +3,22 @@ export type Sentence = {
   text: string;
   translation?: string;
   grammar?: string;
+  keyPhrases?: Array<{
+    phrase: string;
+    explanation: string;
+  }>;
+  advancedVocabulary?: Array<{
+    word: string;
+    meaning: string;
+    explanation: string;
+  }>;
   userNote?: string;
   aiStatus?: 'idle' | 'loading' | 'done' | 'error';
+};
+
+export type Paragraph = {
+  id: string;
+  sentences: Sentence[];
 };
 
 export type Document = {
@@ -12,6 +26,7 @@ export type Document = {
   title: string;
   createdAt: string;
   sourceText: string;
+  paragraphs?: Paragraph[];
   sentences: Sentence[];
   currentSentenceIndex: number;
   folderId?: string;

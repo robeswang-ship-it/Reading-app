@@ -7,7 +7,7 @@ import {
   parsePdfFile,
   parseTxtFile,
 } from '../utils/fileParsers';
-import { splitIntoSentences } from '../utils/sentenceSplitter';
+import { createDocumentStructure } from '../utils/sentenceSplitter';
 import {
   createFolder,
   deleteFolder,
@@ -319,10 +319,10 @@ function DocumentLibrary({
           sourceText = await cleanExtractedPdfText(rawPdfText);
         }
 
-        const sentences = splitIntoSentences(sourceText).map((text) => ({
-          id: generateDocumentId(),
-          text,
-        }));
+        const { paragraphs, sentences } = createDocumentStructure(
+          sourceText,
+          generateDocumentId,
+        );
 
         if (sentences.length === 0) {
           throw new Error('No readable English text found');
@@ -333,6 +333,7 @@ function DocumentLibrary({
           title: getTitleFromImportedFile(file),
           createdAt: new Date().toISOString(),
           sourceText,
+          paragraphs,
           sentences,
           currentSentenceIndex: 0,
           folderId:

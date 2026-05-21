@@ -34,39 +34,55 @@ function WordPanel({
 }: WordPanelProps) {
   const [note, setNote] = useState('');
   const [meaning, setMeaning] = useState('');
+  const [partOfSpeech, setPartOfSpeech] = useState('');
+  const [englishExplanation, setEnglishExplanation] = useState('');
   const [phonetic, setPhonetic] = useState('');
   const [example, setExample] = useState('');
   const [aiStatus, setAiStatus] = useState('');
 
   useEffect(() => {
+    let isCancelled = false;
+
     setNote('');
     setMeaning('');
+    setPartOfSpeech('');
+    setEnglishExplanation('');
     setPhonetic('');
     setExample('');
     setAiStatus('');
+
+    if (!word) {
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    const explainWord = async () => {
+      setAiStatus('Looking up...');
+      const result = await lookupWord(word);
+
+      if (isCancelled) {
+        return;
+      }
+
+      setMeaning(result.chineseMeaning || result.meaning);
+      setPartOfSpeech(result.partOfSpeech);
+      setEnglishExplanation(result.englishExplanation);
+      setPhonetic(result.phonetic);
+      setExample(result.example);
+      setAiStatus('AI explanation ready.');
+    };
+
+    explainWord();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [word]);
 
   const handleAddVocabulary = () => {
     onAddVocabulary({ meaning, phonetic, example, note });
     setNote('');
-  };
-
-  const handleAiExplain = async () => {
-    if (!word) {
-      return;
-    }
-
-    if (meaning.trim()) {
-      setAiStatus('Meaning already exists. Skipped.');
-      return;
-    }
-
-    setAiStatus('Looking up...');
-    const result = await lookupWord(word);
-    setMeaning((currentMeaning) => currentMeaning || result.meaning);
-    setPhonetic((currentPhonetic) => currentPhonetic || result.phonetic);
-    setExample((currentExample) => currentExample || result.example);
-    setAiStatus('AI explanation ready.');
   };
 
   const content = (
@@ -87,7 +103,7 @@ function WordPanel({
                 htmlFor="word-meaning"
                 className="text-xs font-semibold uppercase text-slate-500"
               >
-                Meaning
+                Chinese Meaning
               </label>
               <textarea
                 id="word-meaning"
@@ -95,7 +111,40 @@ function WordPanel({
                 onChange={(event) => setMeaning(event.target.value)}
                 rows={3}
                 className="mt-2 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                placeholder={`Add meaning for "${word}"...`}
+                placeholder={`Add Chinese meaning for "${word}"...`}
+              />
+            </div>
+
+            <div className="border-t border-slate-200 pt-4">
+              <label
+                htmlFor="word-part-of-speech"
+                className="text-xs font-semibold uppercase text-slate-500"
+              >
+                Part of speech
+              </label>
+              <input
+                id="word-part-of-speech"
+                value={partOfSpeech}
+                onChange={(event) => setPartOfSpeech(event.target.value)}
+                className="mt-2 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                placeholder="noun / verb / adjective..."
+              />
+            </div>
+
+            <div className="border-t border-slate-200 pt-4">
+              <label
+                htmlFor="word-english-explanation"
+                className="text-xs font-semibold uppercase text-slate-500"
+              >
+                English explanation
+              </label>
+              <textarea
+                id="word-english-explanation"
+                value={englishExplanation}
+                onChange={(event) => setEnglishExplanation(event.target.value)}
+                rows={3}
+                className="mt-2 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                placeholder="Add English explanation..."
               />
             </div>
 
@@ -137,14 +186,7 @@ function WordPanel({
               onClick={() => pronounce(word)}
               className="inline-flex h-11 w-full items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             >
-              🔊 Pronounce
-            </button>
-            <button
-              type="button"
-              onClick={handleAiExplain}
-              className="inline-flex h-11 w-full items-center justify-center rounded-md border border-amber-200 bg-white px-4 text-sm font-semibold text-amber-700 shadow-sm transition hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
-            >
-              AI Explain
+              Pronounce
             </button>
             {aiStatus ? (
               <p className="text-sm font-medium text-slate-600">{aiStatus}</p>

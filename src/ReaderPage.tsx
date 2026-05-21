@@ -95,10 +95,13 @@ function ReaderPage({
   }, [document.id, document.currentSentenceIndex]);
 
   useEffect(() => {
-    setSelectedWord(null);
     setFavoriteStatus('');
     setVocabularyStatus('');
   }, [selectedSentenceIndex]);
+
+  useEffect(() => {
+    setSelectedWord(null);
+  }, [document.id]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -170,6 +173,12 @@ function ReaderPage({
           persistAiFields(sentence.id, {
             translation: sentence.translation || analysis.translation,
             grammar: sentence.grammar || analysis.grammar,
+            keyPhrases: sentence.keyPhrases?.length
+              ? sentence.keyPhrases
+              : analysis.keyPhrases,
+            advancedVocabulary: sentence.advancedVocabulary?.length
+              ? sentence.advancedVocabulary
+              : analysis.advancedVocabulary,
             aiStatus: 'done',
           });
         } catch {
@@ -199,6 +208,12 @@ function ReaderPage({
     };
     updateDocument(nextDocument);
     onDocumentChange(nextDocument);
+  };
+
+  const handleSelectWord = (word: string) => {
+    setSelectedWord((currentWord) =>
+      currentWord?.toLowerCase() === word.toLowerCase() ? null : word,
+    );
   };
 
   const handleFavoriteSentence = () => {
@@ -274,6 +289,8 @@ function ReaderPage({
       persistAiFields(selectedSentence.id, {
         translation: analysis.translation,
         grammar: analysis.grammar,
+        keyPhrases: analysis.keyPhrases,
+        advancedVocabulary: analysis.advancedVocabulary,
         aiStatus: 'done',
         overwrite: true,
       });
@@ -380,7 +397,7 @@ function ReaderPage({
           {readingMode === 'intensive' ? (
             <SentenceDetail
               sentence={selectedSentence}
-              onSelectWord={setSelectedWord}
+              onSelectWord={handleSelectWord}
               selectedWord={selectedWord}
               favoriteStatus={favoriteStatus}
               onFavoriteSentence={handleFavoriteSentence}
@@ -392,12 +409,13 @@ function ReaderPage({
             />
           ) : null}
           <ContinuousText
+            paragraphs={document.paragraphs}
             sentences={document.sentences}
             selectedIndex={selectedSentenceIndex}
             selectedWord={selectedWord}
             fontSize={articleFontSize}
             onSelectSentence={handleSelectSentence}
-            onSelectWord={setSelectedWord}
+            onSelectWord={handleSelectWord}
           />
           {readingMode === 'extensive' ? (
             <WordPanel

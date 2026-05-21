@@ -4,9 +4,11 @@ import type {
   Folder,
   LibraryExport,
   LibraryExportV3,
+  Paragraph,
   Sentence,
   VocabularyItem,
 } from '../types';
+import { splitIntoParagraphTexts, splitIntoSentences } from './sentenceSplitter';
 
 const DOCUMENTS_KEY = 'ai-intensive-reading:documents';
 const FOLDERS_KEY = 'ai-intensive-reading:folders';
@@ -54,12 +56,38 @@ function isSentence(value: unknown): value is Sentence {
     (value.translation === undefined ||
       typeof value.translation === 'string') &&
     (value.grammar === undefined || typeof value.grammar === 'string') &&
+    (value.keyPhrases === undefined ||
+      (Array.isArray(value.keyPhrases) &&
+        value.keyPhrases.every(
+          (item) =>
+            isRecord(item) &&
+            typeof item.phrase === 'string' &&
+            typeof item.explanation === 'string',
+        ))) &&
+    (value.advancedVocabulary === undefined ||
+      (Array.isArray(value.advancedVocabulary) &&
+        value.advancedVocabulary.every(
+          (item) =>
+            isRecord(item) &&
+            typeof item.word === 'string' &&
+            typeof item.meaning === 'string' &&
+            typeof item.explanation === 'string',
+        ))) &&
     (value.userNote === undefined || typeof value.userNote === 'string') &&
     (value.aiStatus === undefined ||
       value.aiStatus === 'idle' ||
       value.aiStatus === 'loading' ||
       value.aiStatus === 'done' ||
       value.aiStatus === 'error')
+  );
+}
+
+function isParagraph(value: unknown): value is Paragraph {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    Array.isArray(value.sentences) &&
+    value.sentences.every(isSentence)
   );
 }
 
@@ -75,6 +103,8 @@ export function isDocument(value: unknown): value is Document {
     typeof value.sourceText === 'string' &&
     Array.isArray(value.sentences) &&
     value.sentences.every(isSentence) &&
+    (value.paragraphs === undefined ||
+      (Array.isArray(value.paragraphs) && value.paragraphs.every(isParagraph))) &&
     typeof value.currentSentenceIndex === 'number' &&
     Number.isInteger(value.currentSentenceIndex) &&
     (value.folderId === undefined || typeof value.folderId === 'string')
@@ -161,19 +191,123 @@ export function isLibraryExport(value: unknown): value is LibraryExport {
   return false;
 }
 
+function normalizeSentence(sentence: Sentence): Sentence {
+  return {
+    ...sentence,
+    translation: sentence.translation?.trim() || undefined,
+    grammar: sentence.grammar?.trim() || undefined,
+    keyPhrases: sentence.keyPhrases
+      ?.map((item) => ({
+        phrase: item.phrase.trim(),
+        explanation: item.explanation.trim(),
+      }))
+      .filter((item) => item.phrase && item.explanation),
+    advancedVocabulary: sentence.advancedVocabulary
+      ?.map((item) => ({
+        word: item.word.trim(),
+        meaning: item.meaning.trim(),
+        explanation: item.explanation.trim(),
+      }))
+      .filter((item) => item.word && item.meaning && item.explanation),
+    userNote: sentence.userNote?.trim() || undefined,
+    aiStatus: sentence.aiStatus ?? 'idle',
+  };
+}
+
+function buildParagraphsFromSource(
+  sourceText: string,
+  sentences: Sentence[],
+): Paragraph[] {
+  const paragraphTexts = splitIntoParagraphTexts(sourceText);
+
+  if (paragraphTexts.length === 0) {
+    return sentences.length > 0
+      ? [{ id: generateDocumentId(), sentences }]
+      : [];
+  }
+
+  const paragraphs: Paragraph[] = [];
+  let sentenceCursor = 0;
+
+  for (const paragraphText of paragraphTexts) {
+    const sentenceCount = splitIntoSentences(paragraphText).length;
+    const paragraphSentences = sentences.slice(
+      sentenceCursor,
+      sentenceCursor + sentenceCount,
+    );
+
+    if (paragraphSentences.length > 0) {
+      paragraphs.push({
+        id: generateDocumentId(),
+        sentences: paragraphSentences,
+      });
+    }
+
+    sentenceCursor += sentenceCount;
+  }
+
+  if (sentenceCursor < sentences.length) {
+    paragraphs.push({
+      id: generateDocumentId(),
+      sentences: sentences.slice(sentenceCursor),
+    });
+  }
+
+  return paragraphs.length > 0
+    ? paragraphs
+    : [{ id: generateDocumentId(), sentences }];
+}
+
+function normalizeParagraphs(
+  document: Document,
+  sentences: Sentence[],
+): Paragraph[] {
+  const sentenceById = new Map(sentences.map((sentence) => [sentence.id, sentence]));
+  const paragraphIds = new Set<string>();
+  const paragraphs =
+    document.paragraphs
+      ?.map((paragraph) => {
+        const paragraphSentences = paragraph.sentences
+          .map((sentence) => sentenceById.get(sentence.id))
+          .filter((sentence): sentence is Sentence => Boolean(sentence));
+
+        paragraphSentences.forEach((sentence) => paragraphIds.add(sentence.id));
+
+        return {
+          id: paragraph.id,
+          sentences: paragraphSentences,
+        };
+      })
+      .filter((paragraph) => paragraph.sentences.length > 0) ?? [];
+
+  const missingSentences = sentences.filter((sentence) => !paragraphIds.has(sentence.id));
+
+  if (paragraphs.length > 0 && missingSentences.length === 0) {
+    return paragraphs;
+  }
+
+  if (paragraphs.length > 0) {
+    return [
+      ...paragraphs,
+      {
+        id: generateDocumentId(),
+        sentences: missingSentences,
+      },
+    ];
+  }
+
+  return buildParagraphsFromSource(document.sourceText, sentences);
+}
+
 function normalizeDocument(document: Document): Document {
   const maxIndex = Math.max(document.sentences.length - 1, 0);
   const folderId = document.folderId?.trim();
+  const sentences = document.sentences.map(normalizeSentence);
 
   return {
     ...document,
-    sentences: document.sentences.map((sentence) => ({
-      ...sentence,
-      translation: sentence.translation?.trim() || undefined,
-      grammar: sentence.grammar?.trim() || undefined,
-      userNote: sentence.userNote?.trim() || undefined,
-      aiStatus: sentence.aiStatus ?? 'idle',
-    })),
+    sentences,
+    paragraphs: normalizeParagraphs(document, sentences),
     title: document.title.trim() || 'Untitled Document',
     folderId: folderId || undefined,
     currentSentenceIndex: Math.min(
@@ -281,7 +415,9 @@ export function updateSentenceAiFields(
   documentId: string,
   sentenceId: string,
   fields: Pick<Sentence, 'aiStatus'> &
-    Partial<Pick<Sentence, 'translation' | 'grammar'>> & {
+    Partial<
+      Pick<Sentence, 'translation' | 'grammar' | 'keyPhrases' | 'advancedVocabulary'>
+    > & {
       overwrite?: boolean;
     },
 ) {
@@ -309,6 +445,22 @@ export function updateSentenceAiFields(
                   : fields.overwrite
                     ? fields.grammar
                     : sentence.grammar || fields.grammar,
+              keyPhrases:
+                fields.keyPhrases === undefined
+                  ? sentence.keyPhrases
+                  : fields.overwrite
+                    ? fields.keyPhrases
+                    : sentence.keyPhrases?.length
+                      ? sentence.keyPhrases
+                      : fields.keyPhrases,
+              advancedVocabulary:
+                fields.advancedVocabulary === undefined
+                  ? sentence.advancedVocabulary
+                  : fields.overwrite
+                    ? fields.advancedVocabulary
+                    : sentence.advancedVocabulary?.length
+                      ? sentence.advancedVocabulary
+                      : fields.advancedVocabulary,
               aiStatus: fields.aiStatus,
             }
           : sentence,
@@ -641,7 +793,7 @@ function mergeDocumentsWithIdMap(existing: Document[], imported: Document[]) {
     usedIds.add(nextId);
     idMap.set(document.id, nextId);
 
-    const sentences = normalizedDocument.sentences.map((sentence) => {
+    const sentences: Sentence[] = normalizedDocument.sentences.map((sentence) => {
       const nextSentenceId = generateDocumentId();
       sentenceIdMap.set(sentence.id, nextSentenceId);
       return {
@@ -649,11 +801,23 @@ function mergeDocumentsWithIdMap(existing: Document[], imported: Document[]) {
         id: nextSentenceId,
       };
     });
+    const sentenceByOldId = new Map(
+      sentences.map((sentence, index) => [
+        normalizedDocument.sentences[index]?.id,
+        sentence,
+      ]),
+    );
 
     return {
       ...normalizedDocument,
       id: nextId,
       sentences,
+      paragraphs: normalizedDocument.paragraphs?.map((paragraph) => ({
+        id: generateDocumentId(),
+        sentences: paragraph.sentences
+          .map((sentence) => sentenceByOldId.get(sentence.id))
+          .filter((sentence): sentence is Sentence => Boolean(sentence)),
+      })),
     };
   });
 
@@ -675,10 +839,27 @@ export function mergeDocuments(
       (document) => ({
         ...document,
         id: generateDocumentId(),
-        sentences: document.sentences.map((sentence) => ({
-          ...sentence,
-          id: generateDocumentId(),
-        })),
+        ...(() => {
+          const sentenceMap = new Map<string, Sentence>();
+          const sentences = document.sentences.map((sentence) => {
+            const nextSentence = {
+              ...sentence,
+              id: generateDocumentId(),
+            };
+            sentenceMap.set(sentence.id, nextSentence);
+            return nextSentence;
+          });
+
+          return {
+            sentences,
+            paragraphs: document.paragraphs?.map((paragraph) => ({
+              id: generateDocumentId(),
+              sentences: paragraph.sentences
+                .map((sentence) => sentenceMap.get(sentence.id))
+                .filter((sentence): sentence is Sentence => Boolean(sentence)),
+            })),
+          };
+        })(),
       }),
     ),
   );

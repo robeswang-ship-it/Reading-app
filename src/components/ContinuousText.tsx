@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import type { Sentence } from '../types';
+import type { Paragraph, Sentence } from '../types';
 
 type ContinuousTextProps = {
+  paragraphs?: Paragraph[];
   sentences: Sentence[];
   selectedIndex: number;
   selectedWord: string | null;
@@ -15,6 +16,7 @@ function normalizeWord(word: string) {
 }
 
 function ContinuousText({
+  paragraphs,
   sentences,
   selectedIndex,
   selectedWord,
@@ -23,6 +25,13 @@ function ContinuousText({
   onSelectWord,
 }: ContinuousTextProps) {
   const selectedSentenceRef = useRef<HTMLSpanElement | null>(null);
+  const sentenceIndexById = new Map(
+    sentences.map((sentence, index) => [sentence.id, index]),
+  );
+  const visibleParagraphs =
+    paragraphs && paragraphs.length > 0
+      ? paragraphs
+      : [{ id: 'legacy-paragraph', sentences }];
 
   useEffect(() => {
     selectedSentenceRef.current?.scrollIntoView({
@@ -41,53 +50,58 @@ function ContinuousText({
             lineHeight: 1.75,
           }}
         >
-          {sentences.map((sentence, sentenceIndex) => {
-            const isSelected = sentenceIndex === selectedIndex;
-            const words = sentence.text.split(/(\s+)/);
+          {visibleParagraphs.map((paragraph) => (
+            <p key={paragraph.id} className="mb-7 last:mb-0">
+              {paragraph.sentences.map((sentence) => {
+                const sentenceIndex = sentenceIndexById.get(sentence.id) ?? 0;
+                const isSelected = sentenceIndex === selectedIndex;
+                const words = sentence.text.split(/(\s+)/);
 
-            return (
-              <span
-                key={sentence.id}
-                ref={isSelected ? selectedSentenceRef : null}
-                onClick={() => onSelectSentence(sentenceIndex)}
-                className={`rounded px-1 py-0.5 transition ${
-                  isSelected ? 'bg-slate-200/80' : 'hover:bg-slate-100'
-                }`}
-              >
-                {words.map((part, wordIndex) => {
-                  if (/^\s+$/.test(part)) {
-                    return part;
-                  }
+                return (
+                  <span
+                    key={sentence.id}
+                    ref={isSelected ? selectedSentenceRef : null}
+                    onClick={() => onSelectSentence(sentenceIndex)}
+                    className={`rounded px-1 py-0.5 transition ${
+                      isSelected ? 'bg-slate-200/80' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    {words.map((part, wordIndex) => {
+                      if (/^\s+$/.test(part)) {
+                        return part;
+                      }
 
-                  const normalizedWord = normalizeWord(part);
-                  const isWordSelected =
-                    selectedWord?.toLowerCase() ===
-                    normalizedWord.toLowerCase();
+                      const normalizedWord = normalizeWord(part);
+                      const isWordSelected =
+                        selectedWord?.toLowerCase() ===
+                        normalizedWord.toLowerCase();
 
-                  return (
-                    <button
-                      key={`${sentence.id}-${part}-${wordIndex}`}
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSelectSentence(sentenceIndex);
-                        if (normalizedWord) {
-                          onSelectWord(normalizedWord);
-                        }
-                      }}
-                      className={`inline rounded px-0.5 text-left transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${
-                        isWordSelected
-                          ? 'bg-amber-100 text-amber-950'
-                          : 'hover:bg-slate-100'
-                      }`}
-                    >
-                      {part}
-                    </button>
-                  );
-                })}{' '}
-              </span>
-            );
-          })}
+                      return (
+                        <button
+                          key={`${sentence.id}-${part}-${wordIndex}`}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onSelectSentence(sentenceIndex);
+                            if (normalizedWord) {
+                              onSelectWord(normalizedWord);
+                            }
+                          }}
+                          className={`inline rounded px-0.5 text-left transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${
+                            isWordSelected
+                              ? 'bg-amber-100 text-amber-950'
+                              : 'hover:bg-slate-100'
+                          }`}
+                        >
+                          {part}
+                        </button>
+                      );
+                    })}{' '}
+                  </span>
+                );
+              })}
+            </p>
+          ))}
         </div>
       </div>
     </article>

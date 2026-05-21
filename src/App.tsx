@@ -8,8 +8,8 @@ import ReviewSentencesPage from './components/ReviewSentencesPage';
 import ReviewVocabularyPage from './components/ReviewVocabularyPage';
 import TextImporter from './components/TextImporter';
 import VocabularyPage from './components/VocabularyPage';
-import type { Document, Folder, Sentence } from './types';
-import { splitIntoSentences } from './utils/sentenceSplitter';
+import type { Document, Folder } from './types';
+import { createDocumentStructure } from './utils/sentenceSplitter';
 import { supabase } from './services/supabaseClient';
 import {
   deleteDocument,
@@ -27,13 +27,6 @@ type AppRoute =
   | 'favorites'
   | 'reviewVocabulary'
   | 'reviewSentences';
-
-function createSentences(sourceText: string): Sentence[] {
-  return splitIntoSentences(sourceText).map((text) => ({
-    id: generateDocumentId(),
-    text,
-  }));
-}
 
 function App() {
   const [route, setRoute] = useState<AppRoute>('library');
@@ -64,7 +57,10 @@ function App() {
   };
 
   const handleCreateDocument = (title: string, sourceText: string) => {
-    const sentences = createSentences(sourceText);
+    const { paragraphs, sentences } = createDocumentStructure(
+      sourceText,
+      generateDocumentId,
+    );
 
     if (sentences.length === 0) {
       return 'Please enter text that contains at least one readable sentence.';
@@ -75,6 +71,7 @@ function App() {
       title: title.trim(),
       createdAt: new Date().toISOString(),
       sourceText,
+      paragraphs,
       sentences,
       currentSentenceIndex: 0,
     };
