@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import type { Document, Folder } from '../types';
+import type { Document, Folder, SystemCollection } from '../types';
 import type { CloudSyncView } from '../hooks/useCloudLibrarySync';
+import type { SystemLibraryView } from '../hooks/useSystemLibrary';
 import { cleanExtractedPdfText } from '../services/aiService';
 import {
   parseDocxFile,
@@ -31,6 +32,8 @@ type DocumentLibraryProps = {
   documents: Document[];
   folders: Folder[];
   cloudSyncView: CloudSyncView;
+  systemCollections: SystemCollection[];
+  systemLibraryView: SystemLibraryView;
   userEmail: string;
   onCreateDocument: () => void;
   onDeleteDocument: (id: string) => void;
@@ -101,7 +104,20 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Import failed';
 }
 
-function getFolderName(folders: Folder[], folderId?: string) {
+function getDocumentGroupName(
+  document: Document,
+  folders: Folder[],
+  systemCollections: SystemCollection[],
+) {
+  if (document.origin === 'system') {
+    return (
+      systemCollections.find(
+        (collection) => collection.id === document.systemCollectionId,
+      )?.title ?? 'System Library'
+    );
+  }
+
+  const folderId = document.folderId;
   return folders.find((folder) => folder.id === folderId)?.name ?? 'Unfiled';
 }
 
@@ -138,6 +154,8 @@ function DocumentLibrary({
   documents,
   folders,
   cloudSyncView,
+  systemCollections,
+  systemLibraryView,
   userEmail,
   onCreateDocument,
   onDeleteDocument,
@@ -186,7 +204,14 @@ function DocumentLibrary({
       }
 
       if (selectedFolder === 'unfiled') {
-        return !document.folderId;
+        return document.origin !== 'system' && !document.folderId;
+      }
+
+      if (selectedFolder.startsWith('system:')) {
+        return (
+          document.origin === 'system' &&
+          document.systemCollectionId === selectedFolder.slice(7)
+        );
       }
 
       return document.folderId === selectedFolder;
@@ -449,6 +474,21 @@ function DocumentLibrary({
             </div>
           </div>
         </section>
+
+        <section
+          className={`mb-5 rounded-lg border px-4 py-3 ${
+            systemLibraryView.state === 'error'
+              ? 'border-rose-200 bg-rose-50'
+              : 'border-violet-200 bg-violet-50'
+          }`}
+        >
+          <p className="text-sm font-semibold text-slate-900">
+            System Library · {systemLibraryView.state}
+          </p>
+          <p className="mt-1 text-sm text-slate-700">
+            {systemLibraryView.message}
+          </p>
+        </section>
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-medium text-cyan-700">
@@ -609,6 +649,30 @@ function DocumentLibrary({
                 Unfiled
               </button>
 
+              {systemCollections.length > 0 ? (
+                <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-violet-700">
+                  System Library
+                </p>
+              ) : null}
+              {systemCollections.map((collection) => {
+                const collectionView = `system:${collection.id}`;
+
+                return (
+                  <button
+                    key={collection.id}
+                    type="button"
+                    onClick={() => setSelectedFolder(collectionView)}
+                    className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                      selectedFolder === collectionView
+                        ? 'bg-violet-50 font-semibold text-violet-950'
+                        : 'text-slate-700 hover:bg-violet-50'
+                    }`}
+                  >
+                    {collection.title}
+                  </button>
+                );
+              })}
+
               {folders.map((folder) => (
                 <div key={folder.id} className="flex gap-1">
                   <button
@@ -697,8 +761,17 @@ function DocumentLibrary({
                               {document.title}
                             </h2>
                             <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                              {getFolderName(folders, document.folderId)}
+                              {getDocumentGroupName(
+                                document,
+                                folders,
+                                systemCollections,
+                              )}
                             </span>
+                            {document.origin === 'system' ? (
+                              <span className="rounded bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-800">
+                                Shared · Read only
+                              </span>
+                            ) : null}
                           </div>
                           <dl className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-5">
                             <div>
@@ -743,24 +816,26 @@ function DocumentLibrary({
                         </div>
 
                         <div className="flex flex-col gap-2 md:flex-row xl:justify-end">
-                          <select
-                            value={document.folderId ?? ''}
-                            onChange={(event) =>
-                              handleMoveDocument(
-                                document.id,
-                                event.target.value,
-                              )
-                            }
-                            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                            aria-label={`Move ${document.title}`}
-                          >
-                            <option value="">Unfiled</option>
-                            {folders.map((folder) => (
-                              <option key={folder.id} value={folder.id}>
-                                {folder.name}
-                              </option>
-                            ))}
-                          </select>
+                          {document.origin !== 'system' ? (
+                            <select
+                              value={document.folderId ?? ''}
+                              onChange={(event) =>
+                                handleMoveDocument(
+                                  document.id,
+                                  event.target.value,
+                                )
+                              }
+                              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                              aria-label={`Move ${document.title}`}
+                            >
+                              <option value="">Unfiled</option>
+                              {folders.map((folder) => (
+                                <option key={folder.id} value={folder.id}>
+                                  {folder.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => onOpenDocument(document)}
@@ -768,20 +843,24 @@ function DocumentLibrary({
                           >
                             Open
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRenameDocument(document)}
-                            className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-                          >
-                            Rename
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteDocument(document.id)}
-                            className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
-                          >
-                            Delete
-                          </button>
+                          {document.origin !== 'system' ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleRenameDocument(document)}
+                                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+                              >
+                                Rename
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteDocument(document.id)}
+                                className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : null}
                         </div>
                         </li>
                       );

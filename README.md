@@ -75,6 +75,26 @@ The migration creates `public.reading_libraries` with Row Level Security. Each
 authenticated account can read and write only the row whose `user_id` matches
 its Supabase Auth user id.
 
+## Shared System Library Setup
+
+Run this additional migration in the Supabase SQL Editor:
+
+```text
+supabase/migrations/20260729_system_library.sql
+```
+
+It creates:
+
+- `system_collections`: published read-only collections shared by all users
+- `system_documents`: one shared copy of each source document and its sentence structure
+- `user_system_document_states`: per-user progress and personal sentence notes
+
+Authenticated users can only read published system content. They cannot create,
+edit, or delete shared content. Each user can read and write only their own
+progress and notes. Shared documents are never included in the per-user cloud
+library snapshot. Translation, grammar, phrases, and vocabulary analysis are
+generated only when a user requests them and are not stored in Supabase.
+
 ## Local Development
 
 1. Install Node.js `20.19.0` or newer.

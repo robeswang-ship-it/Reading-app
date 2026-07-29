@@ -17,6 +17,7 @@ type SentenceDetailProps = {
     >,
   ) => void;
   onSelectWord: (word: string) => void;
+  isSystemDocument?: boolean;
   showWordExplanation?: boolean;
   vocabularyStatus?: string;
 };
@@ -34,6 +35,7 @@ function SentenceDetail({
   onSaveSentenceNotes,
   onAddVocabulary,
   onSelectWord,
+  isSystemDocument = false,
   showWordExplanation = false,
   vocabularyStatus,
 }: SentenceDetailProps) {
@@ -100,13 +102,20 @@ function SentenceDetail({
             >
               Favorite Sentence
             </button>
+            {isSystemDocument ? (
+              <span className="inline-flex h-8 items-center rounded-full border border-violet-200 bg-violet-50 px-3 text-xs font-semibold text-violet-800">
+                On-demand AI
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={onReanalyzeSentence}
               disabled={!sentence || sentence.aiStatus === 'loading'}
               className="inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-cyan-200 bg-cyan-50 px-3 text-xs font-semibold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             >
-              Re-analyze
+              {isSystemDocument && sentence?.aiStatus !== 'done'
+                ? 'Analyze Sentence'
+                : 'Re-analyze'}
             </button>
           </div>
         </div>
@@ -168,9 +177,18 @@ function SentenceDetail({
           <textarea
             value={translation}
             onChange={(event) => setTranslation(event.target.value)}
+            readOnly={isSystemDocument}
             rows={3}
-            className="mt-2 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-            placeholder="Add Chinese translation..."
+            className={`mt-2 w-full resize-y rounded-md border px-3 py-2 text-sm leading-6 outline-none transition ${
+              isSystemDocument
+                ? 'cursor-default border-slate-200 bg-slate-50 text-slate-700'
+                : 'border-slate-300 bg-white focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100'
+            }`}
+            placeholder={
+              isSystemDocument
+                ? 'Click Analyze Sentence to generate a translation.'
+                : 'Add Chinese translation...'
+            }
           />
         </section>
 
@@ -182,9 +200,14 @@ function SentenceDetail({
             <textarea
               value={grammar}
               onChange={(event) => setGrammar(event.target.value)}
+              readOnly={isSystemDocument}
               rows={7}
               className="min-h-36 w-full resize-none border-0 bg-transparent p-0 text-[15px] leading-7 text-slate-800 outline-none placeholder:text-slate-400"
-              placeholder="Add grammar explanation..."
+              placeholder={
+                isSystemDocument
+                  ? 'Click Analyze Sentence to generate a grammar explanation.'
+                  : 'Add grammar explanation...'
+              }
             />
           </div>
         </section>

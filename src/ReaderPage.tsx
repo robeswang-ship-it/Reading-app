@@ -16,6 +16,15 @@ type ReaderPageProps = {
   document: Document;
   onBackToLibrary: () => void;
   onDocumentChange: (document: Document) => void;
+  onSystemProgressChange?: (
+    documentId: string,
+    currentSentenceIndex: number,
+  ) => void;
+  onSystemSentenceNoteChange?: (
+    documentId: string,
+    sentenceId: string,
+    note: string,
+  ) => void;
 };
 
 type ReadingMode = 'extensive' | 'intensive';
@@ -23,6 +32,30 @@ const ARTICLE_FONT_SIZE_KEY = 'ai-intensive-reading:article-font-size';
 const DEFAULT_ARTICLE_FONT_SIZE = 21;
 const MIN_ARTICLE_FONT_SIZE = 16;
 const MAX_ARTICLE_FONT_SIZE = 28;
+
+function updateTransientSentence(
+  document: Document,
+  sentenceId: string,
+  fields: Partial<Document['sentences'][number]>,
+) {
+  const sentences = document.sentences.map((sentence) =>
+    sentence.id === sentenceId ? { ...sentence, ...fields } : sentence,
+  );
+  const sentenceById = new Map(
+    sentences.map((sentence) => [sentence.id, sentence]),
+  );
+
+  return {
+    ...document,
+    sentences,
+    paragraphs: document.paragraphs?.map((paragraph) => ({
+      ...paragraph,
+      sentences: paragraph.sentences
+        .map((sentence) => sentenceById.get(sentence.id))
+        .filter((sentence) => sentence !== undefined),
+    })),
+  };
+}
 
 function getStoredArticleFontSize() {
   const storedValue = window.localStorage.getItem(ARTICLE_FONT_SIZE_KEY);
@@ -42,7 +75,10 @@ function ReaderPage({
   document,
   onBackToLibrary,
   onDocumentChange,
+  onSystemProgressChange,
+  onSystemSentenceNoteChange,
 }: ReaderPageProps) {
+  const isSystemDocument = document.origin === 'system';
   const [selectedSentenceIndex, setSelectedSentenceIndex] = useState(
     document.currentSentenceIndex,
   );
@@ -133,6 +169,10 @@ function ReaderPage({
   });
 
   useEffect(() => {
+    if (isSystemDocument) {
+      return;
+    }
+
     let isCancelled = false;
 
     const getProcessingQueue = () => {
@@ -198,7 +238,12 @@ function ReaderPage({
     return () => {
       isCancelled = true;
     };
-  }, [document.id, persistAiFields, selectedSentenceIndex]);
+  }, [
+    document.id,
+    isSystemDocument,
+    persistAiFields,
+    selectedSentenceIndex,
+  ]);
 
   const handleSelectSentence = (index: number) => {
     setSelectedSentenceIndex(index);
@@ -206,7 +251,13 @@ function ReaderPage({
       ...document,
       currentSentenceIndex: index,
     };
-    updateDocument(nextDocument);
+
+    if (isSystemDocument) {
+      onSystemProgressChange?.(document.id, index);
+    } else {
+      updateDocument(nextDocument);
+    }
+
     onDocumentChange(nextDocument);
   };
 
@@ -266,6 +317,27 @@ function ReaderPage({
       return;
     }
 
+    if (isSystemDocument) {
+      onSystemSentenceNoteChange?.(
+        document.id,
+        selectedSentence.id,
+        fields.userNote ?? '',
+      );
+      const nextDocument = {
+        ...document,
+        sentences: document.sentences.map((sentence) =>
+          sentence.id === selectedSentence.id
+            ? {
+                ...sentence,
+                userNote: fields.userNote?.trim() || undefined,
+              }
+            : sentence,
+        ),
+      };
+      onDocumentChange(nextDocument);
+      return;
+    }
+
     const updatedDocument = updateSentenceFields(
       document.id,
       selectedSentence.id,
@@ -279,6 +351,34 @@ function ReaderPage({
 
   const handleReanalyzeSentence = async () => {
     if (!selectedSentence) {
+      return;
+    }
+
+    if (isSystemDocument) {
+      onDocumentChange(
+        updateTransientSentence(documentRef.current, selectedSentence.id, {
+          aiStatus: 'loading',
+        }),
+      );
+
+      try {
+        const analysis = await analyzeSentence(selectedSentence.text);
+        onDocumentChange(
+          updateTransientSentence(documentRef.current, selectedSentence.id, {
+            translation: analysis.translation,
+            grammar: analysis.grammar,
+            keyPhrases: analysis.keyPhrases,
+            advancedVocabulary: analysis.advancedVocabulary,
+            aiStatus: 'done',
+          }),
+        );
+      } catch {
+        onDocumentChange(
+          updateTransientSentence(documentRef.current, selectedSentence.id, {
+            aiStatus: 'error',
+          }),
+        );
+      }
       return;
     }
 
@@ -404,6 +504,7 @@ function ReaderPage({
               onReanalyzeSentence={handleReanalyzeSentence}
               onSaveSentenceNotes={handleSaveSentenceNotes}
               onAddVocabulary={handleAddVocabulary}
+              isSystemDocument={isSystemDocument}
               showWordExplanation
               vocabularyStatus={vocabularyStatus}
             />

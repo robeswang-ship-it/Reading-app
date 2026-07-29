@@ -13,6 +13,7 @@ import type { Document, Folder } from './types';
 import { createDocumentStructure } from './utils/sentenceSplitter';
 import { supabase } from './services/supabaseClient';
 import { useCloudLibrarySync } from './hooks/useCloudLibrarySync';
+import { useSystemLibrary } from './hooks/useSystemLibrary';
 import {
   deleteDocument,
   generateDocumentId,
@@ -69,6 +70,7 @@ function App() {
     overwriteCloudWithThisDevice,
     useCloudCopy,
   } = useCloudLibrarySync(session?.user.id, refreshLibrary);
+  const systemLibrary = useSystemLibrary(session?.user.id);
 
   const handleCreateDocument = (title: string, sourceText: string) => {
     const { paragraphs, sentences } = createDocumentStructure(
@@ -173,6 +175,8 @@ function App() {
         document={activeDocument}
         onBackToLibrary={handleBackToLibrary}
         onDocumentChange={setActiveDocument}
+        onSystemProgressChange={systemLibrary.updateProgress}
+        onSystemSentenceNoteChange={systemLibrary.updateSentenceNote}
       />
     );
   }
@@ -199,9 +203,11 @@ function App() {
 
   return (
     <DocumentLibrary
-      documents={documents}
+      documents={[...systemLibrary.documents, ...documents]}
       folders={folders}
       cloudSyncView={cloudSyncView}
+      systemCollections={systemLibrary.collections}
+      systemLibraryView={systemLibrary.view}
       userEmail={session.user.email ?? ''}
       onCreateDocument={() => setRoute('create')}
       onDeleteDocument={handleDeleteDocument}

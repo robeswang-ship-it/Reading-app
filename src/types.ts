@@ -30,12 +30,29 @@ export type Document = {
   sentences: Sentence[];
   currentSentenceIndex: number;
   folderId?: string;
+  origin?: 'personal' | 'system';
+  systemCollectionId?: string;
 };
 
 export type Folder = {
   id: string;
   name: string;
   createdAt: string;
+};
+
+export type SystemCollection = {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  sortOrder: number;
+};
+
+export type SystemDocumentState = {
+  documentId: string;
+  currentSentenceIndex: number;
+  sentenceNotes: Record<string, string>;
+  updatedAt?: string;
 };
 
 export type VocabularyItem = {
