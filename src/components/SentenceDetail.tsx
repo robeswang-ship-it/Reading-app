@@ -73,6 +73,17 @@ function SentenceDetail({
     });
   }, [selectedWord, showWordExplanation]);
 
+  useEffect(() => {
+    if (selectedWord || !showWordExplanation) {
+      return;
+    }
+
+    panelRef.current?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  }, [sentence?.id, selectedWord, showWordExplanation]);
+
   const handleSaveNotes = () => {
     onSaveSentenceNotes({ translation, grammar, userNote });
     setSaveStatus('Saved.');

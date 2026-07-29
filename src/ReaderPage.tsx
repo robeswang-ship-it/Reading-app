@@ -246,6 +246,7 @@ function ReaderPage({
   ]);
 
   const handleSelectSentence = (index: number) => {
+    setSelectedWord(null);
     setSelectedSentenceIndex(index);
     const nextDocument = {
       ...document,

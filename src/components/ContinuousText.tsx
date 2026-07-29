@@ -91,9 +91,10 @@ function ContinuousText({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            onSelectSentence(sentenceIndex);
-                            if (normalizedWord) {
+                            if (isSelected && normalizedWord) {
                               onSelectWord(normalizedWord);
+                            } else {
+                              onSelectSentence(sentenceIndex);
                             }
                           }}
                           className={`inline rounded px-0.5 text-left transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${
@@ -101,7 +102,9 @@ function ContinuousText({
                           }${
                             isWordSelected
                               ? 'bg-amber-100 text-amber-950'
-                              : 'hover:bg-slate-100'
+                              : isSelected
+                                ? 'hover:bg-slate-100'
+                                : ''
                           }`}
                         >
                           {part}

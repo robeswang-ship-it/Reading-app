@@ -637,17 +637,6 @@ function DocumentLibrary({
               >
                 All Documents
               </button>
-              <button
-                type="button"
-                onClick={() => setSelectedFolder('unfiled')}
-                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
-                  selectedFolder === 'unfiled'
-                    ? 'bg-cyan-50 font-semibold text-cyan-950'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                Unfiled
-              </button>
 
               {systemCollections.length > 0 ? (
                 <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-violet-700">
@@ -672,6 +661,18 @@ function DocumentLibrary({
                   </button>
                 );
               })}
+
+              <button
+                type="button"
+                onClick={() => setSelectedFolder('unfiled')}
+                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                  selectedFolder === 'unfiled'
+                    ? 'bg-cyan-50 font-semibold text-cyan-950'
+                    : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                Unfiled
+              </button>
 
               {folders.map((folder) => (
                 <div key={folder.id} className="flex gap-1">
