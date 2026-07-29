@@ -6,6 +6,7 @@ import DocumentLibrary from './components/DocumentLibrary';
 import FavoritesPage from './components/FavoritesPage';
 import ReviewSentencesPage from './components/ReviewSentencesPage';
 import ReviewVocabularyPage from './components/ReviewVocabularyPage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 import TextImporter from './components/TextImporter';
 import VocabularyPage from './components/VocabularyPage';
 import type { Document, Folder } from './types';
@@ -36,6 +37,7 @@ function App() {
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -45,7 +47,11 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
+
       setSession(nextSession);
     });
 
@@ -135,6 +141,21 @@ function App() {
 
   if (!session) {
     return <AuthPage />;
+  }
+
+  if (isPasswordRecovery) {
+    return (
+      <ResetPasswordPage
+        onPasswordUpdated={() => {
+          setIsPasswordRecovery(false);
+          window.history.replaceState(
+            null,
+            '',
+            `${window.location.pathname}${window.location.search}`,
+          );
+        }}
+      />
+    );
   }
 
   if (route === 'create') {

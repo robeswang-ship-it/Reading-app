@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { hasSupabaseConfig, supabase } from '../services/supabaseClient';
 
-type AuthMode = 'login' | 'signup';
+type AuthMode = 'login' | 'signup' | 'forgot-password';
 
 function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -16,12 +16,39 @@ function AuthPage() {
     setMessage('');
     setError('');
 
-    if (!email.trim() || !password) {
-      setError('Please enter email and password.');
+    if (!email.trim()) {
+      setError('Please enter your email.');
       return;
     }
 
     setIsSubmitting(true);
+
+    if (mode === 'forgot-password') {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email.trim(),
+        {
+          redirectTo: window.location.origin,
+        },
+      );
+
+      setIsSubmitting(false);
+
+      if (resetError) {
+        setError(resetError.message);
+        return;
+      }
+
+      setMessage(
+        'If this email exists, a password reset link has been sent. Open it in the browser where you want to set the new password.',
+      );
+      return;
+    }
+
+    if (!password) {
+      setIsSubmitting(false);
+      setError('Please enter your password.');
+      return;
+    }
 
     const result =
       mode === 'login'
@@ -54,11 +81,16 @@ function AuthPage() {
             AI Intensive Reading
           </p>
           <h1 className="mt-3 text-4xl font-semibold text-slate-950">
-            {mode === 'login' ? 'Log in' : 'Create account'}
+            {mode === 'login'
+              ? 'Log in'
+              : mode === 'signup'
+                ? 'Create account'
+                : 'Reset password'}
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Sign in to access the reading app. Your documents still stay in
-            this browser for now.
+            {mode === 'forgot-password'
+              ? 'Enter your account email and we will send a secure recovery link.'
+              : 'Sign in to access your cloud reading library.'}
           </p>
         </div>
 
@@ -89,21 +121,27 @@ function AuthPage() {
             autoComplete="email"
           />
 
-          <label
-            htmlFor="auth-password"
-            className="mt-4 block text-sm font-semibold text-slate-800"
-          >
-            Password
-          </label>
-          <input
-            id="auth-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-            placeholder="At least 6 characters"
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-          />
+          {mode !== 'forgot-password' ? (
+            <>
+              <label
+                htmlFor="auth-password"
+                className="mt-4 block text-sm font-semibold text-slate-800"
+              >
+                Password
+              </label>
+              <input
+                id="auth-password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                placeholder="At least 8 characters"
+                autoComplete={
+                  mode === 'login' ? 'current-password' : 'new-password'
+                }
+              />
+            </>
+          ) : null}
 
           {error ? (
             <p className="mt-4 text-sm font-medium text-rose-700" role="alert">
@@ -125,8 +163,24 @@ function AuthPage() {
               ? 'Please wait...'
               : mode === 'login'
                 ? 'Log in'
-                : 'Sign up'}
+                : mode === 'signup'
+                  ? 'Sign up'
+                  : 'Send Reset Link'}
           </button>
+
+          {mode === 'login' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('forgot-password');
+                setError('');
+                setMessage('');
+              }}
+              className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md px-4 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+            >
+              Forgot password?
+            </button>
+          ) : null}
 
           <button
             type="button"
@@ -139,7 +193,9 @@ function AuthPage() {
           >
             {mode === 'login'
               ? 'Need an account? Sign up'
-              : 'Already have an account? Log in'}
+              : mode === 'signup'
+                ? 'Already have an account? Log in'
+                : 'Back to Log In'}
           </button>
         </form>
       </div>

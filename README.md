@@ -12,6 +12,7 @@ A React + TypeScript + Vite + Tailwind CSS English intensive reading app with a 
 - Vocabulary book, favorite sentences, and review pages
 - Import/export library JSON and batch TXT import
 - Supabase email/password authentication
+- Password recovery with an in-app new-password form
 - Optional DeepSeek sentence and word analysis
 - No database tables or cloud sync yet
 
