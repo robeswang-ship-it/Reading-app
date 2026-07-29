@@ -883,7 +883,7 @@ export function exportDocuments(): LibraryExportV3 {
 }
 
 export function importLibrary(libraryExport: LibraryExport) {
-  if (libraryExport.version === 2) {
+  if (libraryExport.version === 2 || libraryExport.version === 3) {
     const folderMerge = mergeFoldersWithIdMap(
       getStoredFolders(),
       libraryExport.folders,

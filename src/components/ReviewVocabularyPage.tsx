@@ -19,21 +19,23 @@ function ReviewVocabularyPage({
   const [queue, setQueue] = useState<VocabularyItem[]>(() =>
     getVocabularyReviewQueue(),
   );
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [reviewedCount, setReviewedCount] = useState(0);
+  const [totalItems] = useState(() => queue.length);
   const [isMeaningVisible, setIsMeaningVisible] = useState(false);
 
-  const currentItem = queue[currentIndex] ?? null;
+  const currentItem = queue[0] ?? null;
   const progressText = useMemo(
     () =>
-      queue.length > 0
-        ? `${Math.min(currentIndex + 1, queue.length)} / ${queue.length}`
+      totalItems > 0
+        ? `${Math.min(reviewedCount + 1, totalItems)} / ${totalItems}`
         : '0 / 0',
-    [currentIndex, queue.length],
+    [reviewedCount, totalItems],
   );
 
   const moveNext = () => {
     setIsMeaningVisible(false);
-    setCurrentIndex((index) => Math.min(index + 1, queue.length));
+    setQueue((currentQueue) => currentQueue.slice(1));
+    setReviewedCount((count) => count + 1);
   };
 
   const handleReview = (remembered: boolean) => {
@@ -42,7 +44,6 @@ function ReviewVocabularyPage({
     }
 
     reviewVocabularyItem(currentItem.id, remembered);
-    setQueue(getVocabularyReviewQueue());
     moveNext();
   };
 
