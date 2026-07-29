@@ -95,23 +95,23 @@ progress and notes. Shared documents are never included in the per-user cloud
 library snapshot. Translation, grammar, phrases, and vocabulary analysis are
 generated only when a user requests them and are not stored in Supabase.
 
-The curated 2024 English I sample is stored in:
+The curated 2010–2026 English I public library is stored as one source file
+per year in:
 
 ```text
-content/system-library/english-one/2024.json
+content/system-library/english-one/
 ```
 
-To regenerate and load its idempotent seed migration:
+To validate or regenerate a yearly idempotent seed:
 
 ```bash
 node scripts/build-system-library-seed.mjs \
-  content/system-library/english-one/2024.json \
-  > supabase/migrations/20260729_english_one_2024_sample.sql
+  content/system-library/english-one/2026.json
 ```
 
-Then run `supabase/migrations/20260729_english_one_2024_sample.sql` in the
-Supabase SQL Editor. Re-running it updates the same six shared documents instead
-of creating duplicates.
+The checked-in migrations seed all 17 years into the shared `英语一`
+collection. Run them in filename order in the Supabase SQL Editor. Re-running
+them updates the same shared documents instead of creating duplicates.
 
 ## Local Development
 

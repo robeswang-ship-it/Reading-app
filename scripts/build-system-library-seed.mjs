@@ -52,7 +52,14 @@ function parseInlineItalics(value) {
   return { text, italicRanges };
 }
 
-function buildDocument(entry, sortOrder) {
+function buildDocument(entry, index) {
+  const yearMatch = entry.title.match(/^(\d{4})_/);
+  if (!yearMatch) {
+    throw new Error(
+      `Document title must start with a four-digit year: ${entry.title}`,
+    );
+  }
+  const sortOrder = (Number(yearMatch[1]) - 2010) * 10 + index;
   const documentId = stableUuid(`system-document:${entry.slug}`);
   const paragraphs = entry.paragraphs.map((paragraph, paragraphIndex) => {
     const parsed = parseInlineItalics(paragraph);
@@ -95,7 +102,11 @@ function buildDocument(entry, sortOrder) {
     )
     .join('\n\n');
 
-  if (/<\/?i>|\(\d{2}\)|【[A-D]】/.test(sourceText)) {
+  if (
+    /<\/?i>|\([4-5]\d\)|【[A-D]】|\[[A-H]\]|Directions:|ANSWER SHEET|[\u4e00-\u9fff]/.test(
+      sourceText,
+    )
+  ) {
     throw new Error(`Unclean source text in ${entry.title}`);
   }
 
