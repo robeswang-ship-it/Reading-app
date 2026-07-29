@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { Document, Folder } from '../types';
+import type { CloudSyncView } from '../hooks/useCloudLibrarySync';
 import { cleanExtractedPdfText } from '../services/aiService';
 import {
   parseDocxFile,
@@ -29,6 +30,7 @@ type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
 type DocumentLibraryProps = {
   documents: Document[];
   folders: Folder[];
+  cloudSyncView: CloudSyncView;
   userEmail: string;
   onCreateDocument: () => void;
   onDeleteDocument: (id: string) => void;
@@ -39,6 +41,10 @@ type DocumentLibraryProps = {
   onOpenVocabulary: () => void;
   onReviewSentences: () => void;
   onReviewVocabulary: () => void;
+  onRetryCloudSync: () => void;
+  onSyncNow: () => void;
+  onOverwriteCloud: () => void;
+  onUseCloudCopy: () => void;
 };
 
 function formatDate(value: string) {
@@ -131,6 +137,7 @@ function getProgress(document: Document) {
 function DocumentLibrary({
   documents,
   folders,
+  cloudSyncView,
   userEmail,
   onCreateDocument,
   onDeleteDocument,
@@ -141,6 +148,10 @@ function DocumentLibrary({
   onOpenVocabulary,
   onReviewSentences,
   onReviewVocabulary,
+  onRetryCloudSync,
+  onSyncNow,
+  onOverwriteCloud,
+  onUseCloudCopy,
 }: DocumentLibraryProps) {
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -163,6 +174,9 @@ function DocumentLibrary({
       return counts;
     }, {});
   }, [favoriteSentences]);
+  const formattedLastSyncedAt = cloudSyncView.lastSyncedAt
+    ? formatDate(cloudSyncView.lastSyncedAt)
+    : null;
 
   const filteredDocuments = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -370,6 +384,71 @@ function DocumentLibrary({
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section
+          className={`mb-5 rounded-lg border px-4 py-3 shadow-sm ${
+            cloudSyncView.state === 'synced'
+              ? 'border-emerald-200 bg-emerald-50'
+              : cloudSyncView.state === 'conflict'
+                ? 'border-amber-300 bg-amber-50'
+                : cloudSyncView.state === 'error' ||
+                    cloudSyncView.state === 'schema-missing'
+                  ? 'border-rose-200 bg-rose-50'
+                  : 'border-cyan-200 bg-cyan-50'
+          }`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Cloud storage · {cloudSyncView.state}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">
+                {cloudSyncView.message}
+                {formattedLastSyncedAt
+                  ? ` Last synced ${formattedLastSyncedAt}.`
+                  : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {cloudSyncView.state === 'conflict' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={onOverwriteCloud}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-amber-700 px-3 text-xs font-semibold text-white transition hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                  >
+                    Keep This Device
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onUseCloudCopy}
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                  >
+                    Use Cloud Copy
+                  </button>
+                </>
+              ) : null}
+              {cloudSyncView.state === 'error' ||
+              cloudSyncView.state === 'schema-missing' ? (
+                <button
+                  type="button"
+                  onClick={onRetryCloudSync}
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-800 transition hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+                >
+                  Retry
+                </button>
+              ) : null}
+              {cloudSyncView.state === 'synced' ? (
+                <button
+                  type="button"
+                  onClick={onSyncNow}
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                >
+                  Sync Now
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-medium text-cyan-700">

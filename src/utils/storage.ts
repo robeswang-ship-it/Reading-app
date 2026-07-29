@@ -14,6 +14,9 @@ const DOCUMENTS_KEY = 'ai-intensive-reading:documents';
 const FOLDERS_KEY = 'ai-intensive-reading:folders';
 const VOCABULARY_KEY = 'ai-intensive-reading:vocabulary-items';
 const FAVORITES_KEY = 'ai-intensive-reading:favorite-sentences';
+const LIBRARY_MODIFIED_AT_KEY = 'ai-intensive-reading:library-modified-at';
+export const LIBRARY_CHANGED_EVENT = 'ai-intensive-reading:library-changed';
+let suppressLibraryChangeEvent = false;
 
 export function generateDocumentId() {
   return window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -43,6 +46,16 @@ function readJsonArray<T>(
 
 function writeJsonArray<T>(storageKey: string, values: T[]) {
   window.localStorage.setItem(storageKey, JSON.stringify(values));
+
+  if (!suppressLibraryChangeEvent) {
+    const modifiedAt = new Date().toISOString();
+    window.localStorage.setItem(LIBRARY_MODIFIED_AT_KEY, modifiedAt);
+    window.dispatchEvent(
+      new CustomEvent(LIBRARY_CHANGED_EVENT, {
+        detail: { storageKey, modifiedAt },
+      }),
+    );
+  }
 }
 
 function isSentence(value: unknown): value is Sentence {
@@ -880,6 +893,52 @@ export function exportDocuments(): LibraryExportV3 {
     vocabularyItems: getVocabularyItems(),
     favoriteSentences: getFavoriteSentences(),
   };
+}
+
+export function hasLocalLibraryData() {
+  const library = exportDocuments();
+
+  return (
+    library.documents.length > 0 ||
+    library.folders.length > 0 ||
+    library.vocabularyItems.length > 0 ||
+    library.favoriteSentences.length > 0
+  );
+}
+
+export function getLocalLibraryModifiedAt() {
+  return window.localStorage.getItem(LIBRARY_MODIFIED_AT_KEY);
+}
+
+export function replaceLibrary(libraryExport: LibraryExport) {
+  const folders =
+    libraryExport.version === 1 ? [] : libraryExport.folders.map(normalizeFolder);
+  const vocabularyItems =
+    libraryExport.version === 1
+      ? []
+      : libraryExport.vocabularyItems.map(normalizeVocabularyItem);
+  const favoriteSentences =
+    libraryExport.version === 1 ? [] : libraryExport.favoriteSentences;
+
+  suppressLibraryChangeEvent = true;
+
+  try {
+    writeJsonArray(
+      DOCUMENTS_KEY,
+      sortByCreatedAtDesc(libraryExport.documents.map(normalizeDocument)),
+    );
+    writeJsonArray(FOLDERS_KEY, sortByCreatedAtDesc(folders));
+    writeJsonArray(
+      VOCABULARY_KEY,
+      sortByCreatedAtDesc(vocabularyItems),
+    );
+    writeJsonArray(
+      FAVORITES_KEY,
+      sortByCreatedAtDesc(favoriteSentences),
+    );
+  } finally {
+    suppressLibraryChangeEvent = false;
+  }
 }
 
 export function importLibrary(libraryExport: LibraryExport) {

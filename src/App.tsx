@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import ReaderPage from './ReaderPage';
 import AuthPage from './components/AuthPage';
@@ -11,6 +11,7 @@ import VocabularyPage from './components/VocabularyPage';
 import type { Document, Folder } from './types';
 import { createDocumentStructure } from './utils/sentenceSplitter';
 import { supabase } from './services/supabaseClient';
+import { useCloudLibrarySync } from './hooks/useCloudLibrarySync';
 import {
   deleteDocument,
   generateDocumentId,
@@ -51,10 +52,17 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const refreshLibrary = () => {
+  const refreshLibrary = useCallback(() => {
     setDocuments(getDocuments());
     setFolders(getFolders());
-  };
+  }, []);
+  const {
+    view: cloudSyncView,
+    retry: retryCloudSync,
+    uploadThisDevice,
+    overwriteCloudWithThisDevice,
+    useCloudCopy,
+  } = useCloudLibrarySync(session?.user.id, refreshLibrary);
 
   const handleCreateDocument = (title: string, sourceText: string) => {
     const { paragraphs, sentences } = createDocumentStructure(
@@ -105,6 +113,13 @@ function App() {
   };
 
   const handleLogout = async () => {
+    if (
+      cloudSyncView.state === 'synced' ||
+      cloudSyncView.state === 'syncing'
+    ) {
+      await uploadThisDevice();
+    }
+
     await supabase.auth.signOut();
     setActiveDocument(null);
     setRoute('library');
@@ -165,6 +180,7 @@ function App() {
     <DocumentLibrary
       documents={documents}
       folders={folders}
+      cloudSyncView={cloudSyncView}
       userEmail={session.user.email ?? ''}
       onCreateDocument={() => setRoute('create')}
       onDeleteDocument={handleDeleteDocument}
@@ -175,6 +191,10 @@ function App() {
       onOpenVocabulary={() => setRoute('vocabulary')}
       onReviewSentences={() => setRoute('reviewSentences')}
       onReviewVocabulary={() => setRoute('reviewVocabulary')}
+      onRetryCloudSync={retryCloudSync}
+      onSyncNow={uploadThisDevice}
+      onOverwriteCloud={overwriteCloudWithThisDevice}
+      onUseCloudCopy={useCloudCopy}
     />
   );
 }

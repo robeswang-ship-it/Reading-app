@@ -40,7 +40,10 @@ If `VITE_DEEPSEEK_API_KEY` is empty, the app falls back to mock AI responses.
 
 ## Data Storage
 
-Documents are stored in browser `localStorage` under the key:
+The app uses Supabase Auth and supports an optional Supabase cloud library.
+Browser `localStorage` remains as a local cache and offline-safe fallback.
+
+Local documents are stored under the key:
 
 ```text
 ai-intensive-reading:documents
@@ -50,6 +53,26 @@ Each document contains the original source text, generated sentence records,
 creation time, and `currentSentenceIndex`. The app updates that index whenever a
 reader selects a sentence, so opening the document later resumes from the saved
 position.
+
+## Supabase Cloud Library Setup
+
+1. Open the Supabase SQL Editor for the existing project.
+2. Run:
+
+   ```text
+   supabase/migrations/20260729_cloud_library.sql
+   ```
+
+3. Reload the app while logged in.
+4. The first device uploads its existing local library when no cloud copy
+   exists.
+5. A new device with an empty local cache downloads the cloud copy.
+6. If both locations already contain data and their relationship is unknown,
+   the app stops and asks which copy to keep.
+
+The migration creates `public.reading_libraries` with Row Level Security. Each
+authenticated account can read and write only the row whose `user_id` matches
+its Supabase Auth user id.
 
 ## Local Development
 
