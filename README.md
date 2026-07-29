@@ -95,6 +95,24 @@ progress and notes. Shared documents are never included in the per-user cloud
 library snapshot. Translation, grammar, phrases, and vocabulary analysis are
 generated only when a user requests them and are not stored in Supabase.
 
+The curated 2024 English I sample is stored in:
+
+```text
+content/system-library/english-one/2024.json
+```
+
+To regenerate and load its idempotent seed migration:
+
+```bash
+node scripts/build-system-library-seed.mjs \
+  content/system-library/english-one/2024.json \
+  > supabase/migrations/20260729_english_one_2024_sample.sql
+```
+
+Then run `supabase/migrations/20260729_english_one_2024_sample.sql` in the
+Supabase SQL Editor. Re-running it updates the same six shared documents instead
+of creating duplicates.
+
 ## Local Development
 
 1. Install Node.js `20.19.0` or newer.

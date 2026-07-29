@@ -56,6 +56,7 @@ function ContinuousText({
                 const sentenceIndex = sentenceIndexById.get(sentence.id) ?? 0;
                 const isSelected = sentenceIndex === selectedIndex;
                 const words = sentence.text.split(/(\s+)/);
+                let characterOffset = 0;
 
                 return (
                   <span
@@ -67,11 +68,19 @@ function ContinuousText({
                     }`}
                   >
                     {words.map((part, wordIndex) => {
+                      const partStart = characterOffset;
+                      const partEnd = partStart + part.length;
+                      characterOffset = partEnd;
+
                       if (/^\s+$/.test(part)) {
                         return part;
                       }
 
                       const normalizedWord = normalizeWord(part);
+                      const isItalic = sentence.italicRanges?.some(
+                        (range) =>
+                          partStart < range.end && partEnd > range.start,
+                      );
                       const isWordSelected =
                         selectedWord?.toLowerCase() ===
                         normalizedWord.toLowerCase();
@@ -88,6 +97,8 @@ function ContinuousText({
                             }
                           }}
                           className={`inline rounded px-0.5 text-left transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${
+                            isItalic ? 'italic ' : ''
+                          }${
                             isWordSelected
                               ? 'bg-amber-100 text-amber-950'
                               : 'hover:bg-slate-100'

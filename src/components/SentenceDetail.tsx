@@ -40,7 +40,7 @@ function SentenceDetail({
   vocabularyStatus,
 }: SentenceDetailProps) {
   const sentenceText = sentence?.text ?? '';
-  const words = sentenceText.split(/\s+/).filter(Boolean);
+  const words = Array.from(sentenceText.matchAll(/\S+/g));
   const [translation, setTranslation] = useState('');
   const [grammar, setGrammar] = useState('');
   const [userNote, setUserNote] = useState('');
@@ -143,8 +143,14 @@ function SentenceDetail({
             English
           </h3>
           <p className="mt-3 text-2xl font-semibold leading-10 text-slate-950">
-            {words.map((word, index) => {
+            {words.map((match, index) => {
+              const word = match[0];
               const normalizedWord = normalizeWord(word);
+              const wordStart = match.index;
+              const wordEnd = wordStart + word.length;
+              const isItalic = sentence?.italicRanges?.some(
+                (range) => wordStart < range.end && wordEnd > range.start,
+              );
               const isSelected =
                 selectedWord?.toLowerCase() === normalizedWord.toLowerCase();
 
@@ -158,6 +164,8 @@ function SentenceDetail({
                     }
                   }}
                   className={`mx-0.5 rounded px-1.5 py-0.5 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                    isItalic ? 'italic ' : ''
+                  }${
                     isSelected
                       ? 'bg-amber-100 text-amber-950'
                       : 'hover:bg-cyan-50 hover:text-cyan-900'

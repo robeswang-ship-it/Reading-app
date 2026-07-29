@@ -66,6 +66,19 @@ function isSentence(value: unknown): value is Sentence {
   return (
     typeof value.id === 'string' &&
     typeof value.text === 'string' &&
+    (value.italicRanges === undefined ||
+      (Array.isArray(value.italicRanges) &&
+        value.italicRanges.every(
+          (range) =>
+            isRecord(range) &&
+            typeof range.start === 'number' &&
+            Number.isInteger(range.start) &&
+            range.start >= 0 &&
+            typeof range.end === 'number' &&
+            Number.isInteger(range.end) &&
+            range.end > range.start &&
+            range.end <= (value.text as string).length,
+        ))) &&
     (value.translation === undefined ||
       typeof value.translation === 'string') &&
     (value.grammar === undefined || typeof value.grammar === 'string') &&
@@ -207,6 +220,16 @@ export function isLibraryExport(value: unknown): value is LibraryExport {
 function normalizeSentence(sentence: Sentence): Sentence {
   return {
     ...sentence,
+    italicRanges: sentence.italicRanges
+      ?.filter(
+        (range) =>
+          Number.isInteger(range.start) &&
+          Number.isInteger(range.end) &&
+          range.start >= 0 &&
+          range.end > range.start &&
+          range.end <= sentence.text.length,
+      )
+      .map((range) => ({ start: range.start, end: range.end })),
     translation: sentence.translation?.trim() || undefined,
     grammar: sentence.grammar?.trim() || undefined,
     keyPhrases: sentence.keyPhrases

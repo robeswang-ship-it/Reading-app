@@ -124,6 +124,7 @@ export async function fetchSystemLibrary(
     const sentences = row.document_data.sentences.map((sentence) => ({
       id: sentence.id,
       text: sentence.text,
+      italicRanges: sentence.italicRanges,
       userNote: state?.sentenceNotes[sentence.id],
       aiStatus: 'idle' as const,
     }));

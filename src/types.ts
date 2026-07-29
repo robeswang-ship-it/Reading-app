@@ -1,6 +1,10 @@
 export type Sentence = {
   id: string;
   text: string;
+  italicRanges?: Array<{
+    start: number;
+    end: number;
+  }>;
   translation?: string;
   grammar?: string;
   keyPhrases?: Array<{
