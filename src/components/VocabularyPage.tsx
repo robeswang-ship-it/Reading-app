@@ -14,6 +14,11 @@ import {
   parseVocabularyText,
   type VocabularyImportResult,
 } from '../utils/vocabularyImport';
+import {
+  exportVocabularyExcel,
+  exportVocabularyWord,
+  getVocabularyExcelFileName,
+} from '../utils/vocabularyExport';
 
 type VocabularyPageProps = {
   onBackToLibrary: () => void;
@@ -41,6 +46,16 @@ function getPrimaryMeaning(item: VocabularyItem) {
   return meaning.split(/[;；]/)[0]?.trim() || meaning;
 }
 
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<VocabularyItem[]>(() =>
@@ -56,6 +71,9 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     completed: number;
     total: number;
   } | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<
+    'word' | 'excel' | null
+  >(null);
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -235,6 +253,48 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     );
   };
 
+  const handleExportWord = async () => {
+    if (items.length === 0) {
+      return;
+    }
+
+    setExportingFormat('word');
+    setImportStatus('');
+
+    try {
+      const result = await exportVocabularyWord(items);
+      downloadBlob(result.blob, result.fileName);
+      setImportStatus(
+        `Exported ${items.length} words in the four-part 百词 Word format.`,
+      );
+    } catch {
+      setImportStatus('Word export failed. Please try again.');
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (items.length === 0) {
+      return;
+    }
+
+    setExportingFormat('excel');
+    setImportStatus('');
+
+    try {
+      const blob = await exportVocabularyExcel(items);
+      downloadBlob(blob, getVocabularyExcelFileName());
+      setImportStatus(
+        `Exported ${items.length} words to four Excel worksheets.`,
+      );
+    } catch {
+      setImportStatus('Excel export failed. Please try again.');
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -266,12 +326,34 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
             <button
               type="button"
               onClick={() => void handleAnalyzeMissing()}
-              disabled={bulkAiProgress !== null || analyzingItemId !== null}
+              disabled={
+                bulkAiProgress !== null ||
+                analyzingItemId !== null ||
+                exportingFormat !== null
+              }
               className="inline-flex h-10 items-center justify-center rounded-md border border-violet-300 bg-white px-4 text-sm font-semibold text-violet-800 shadow-sm transition hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
             >
               {bulkAiProgress
                 ? `AI ${bulkAiProgress.completed}/${bulkAiProgress.total}`
                 : 'AI Fill Missing'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExportWord()}
+              disabled={items.length === 0 || exportingFormat !== null}
+              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+            >
+              {exportingFormat === 'word' ? 'Building Word...' : 'Export 百词 Word'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExportExcel()}
+              disabled={items.length === 0 || exportingFormat !== null}
+              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+            >
+              {exportingFormat === 'excel'
+                ? 'Building Excel...'
+                : 'Export Excel'}
             </button>
             <button
               type="button"
