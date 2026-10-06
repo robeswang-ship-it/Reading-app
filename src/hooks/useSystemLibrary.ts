@@ -8,6 +8,7 @@ import type {
   SystemCollection,
   SystemDocumentState,
 } from '../types';
+import { startsNewReadingSession } from '../utils/storage';
 
 export type SystemLibraryView = {
   state: 'loading' | 'ready' | 'error';
@@ -162,6 +163,40 @@ export function useSystemLibrary(userId: string | undefined) {
     [persistState],
   );
 
+  const recordOpened = useCallback(
+    (documentId: string, openedAt = new Date().toISOString()) => {
+      const currentState = stateByDocumentIdRef.current.get(documentId) ?? {
+        documentId,
+        currentSentenceIndex: 0,
+        sentenceNotes: {},
+        readCount: 0,
+      };
+      const nextState: SystemDocumentState = {
+        ...currentState,
+        readCount:
+          currentState.readCount +
+          (startsNewReadingSession(currentState.lastOpenedAt, openedAt) ? 1 : 0),
+        lastOpenedAt: openedAt,
+      };
+
+      stateByDocumentIdRef.current.set(documentId, nextState);
+      setDocuments((currentDocuments) =>
+        currentDocuments.map((document) =>
+          document.id === documentId
+            ? {
+                ...document,
+                readCount: nextState.readCount,
+                lastOpenedAt: nextState.lastOpenedAt,
+              }
+            : document,
+        ),
+      );
+      persistState(documentId, nextState);
+      return nextState;
+    },
+    [persistState],
+  );
+
   return {
     collections,
     documents,
@@ -169,5 +204,6 @@ export function useSystemLibrary(userId: string | undefined) {
     reload: load,
     updateProgress,
     updateSentenceNote,
+    recordOpened,
   };
 }

@@ -14,6 +14,7 @@ import {
 
 type ReaderPageProps = {
   document: Document;
+  onBackToDocuments: () => void;
   onBackToLibrary: () => void;
   onDocumentChange: (document: Document) => void;
   onSystemProgressChange?: (
@@ -73,6 +74,7 @@ function getStoredArticleFontSize() {
 
 function ReaderPage({
   document,
+  onBackToDocuments,
   onBackToLibrary,
   onDocumentChange,
   onSystemProgressChange,
@@ -478,6 +480,13 @@ function ReaderPage({
                 Reset
               </button>
             </div>
+            <button
+              type="button"
+              onClick={onBackToDocuments}
+              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+            >
+              Back to Documents
+            </button>
             <button
               type="button"
               onClick={onBackToLibrary}

@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import type { Document, Folder, SystemCollection } from '../types';
 import type { CloudSyncView } from '../hooks/useCloudLibrarySync';
 import type { SystemLibraryView } from '../hooks/useSystemLibrary';
@@ -10,6 +10,13 @@ import {
   parseTxtFile,
 } from '../utils/fileParsers';
 import { createDocumentStructure } from '../utils/sentenceSplitter';
+import {
+  getFolderPath,
+  getSystemCollectionView,
+  getSystemDocumentYear,
+  getSystemYearView,
+  parseSystemView,
+} from '../utils/libraryNavigation';
 import {
   createFolder,
   deleteFolder,
@@ -25,8 +32,17 @@ import {
   renameFolder,
 } from '../utils/storage';
 
-type FolderView = 'all' | 'unfiled' | string;
-type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+export type FolderView = 'all' | 'unfiled' | string;
+export type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+
+export type LibraryNavigationState = {
+  selectedView: FolderView;
+  searchQuery: string;
+  sortOption: SortOption;
+  scrollY: number;
+  expandedFolderIds: string[];
+  expandedSystemCollectionIds: string[];
+};
 
 type DocumentLibraryProps = {
   documents: Document[];
@@ -48,6 +64,8 @@ type DocumentLibraryProps = {
   onSyncNow: () => void;
   onOverwriteCloud: () => void;
   onUseCloudCopy: () => void;
+  navigationState: LibraryNavigationState;
+  onNavigationStateChange: (state: LibraryNavigationState) => void;
 };
 
 function formatDate(value: string) {
@@ -117,8 +135,16 @@ function getDocumentGroupName(
     );
   }
 
-  const folderId = document.folderId;
-  return folders.find((folder) => folder.id === folderId)?.name ?? 'Unfiled';
+  const path = getFolderPath(document.folderId, folders);
+  return path.length > 0
+    ? path.map((folder) => folder.name).join(' / ')
+    : 'Unfiled';
+}
+
+function getFolderOptionLabel(folder: Folder, folders: Folder[]) {
+  return getFolderPath(folder.id, folders)
+    .map((pathFolder) => pathFolder.name)
+    .join(' / ');
 }
 
 function sortDocuments(documents: Document[], sortOption: SortOption) {
@@ -170,14 +196,30 @@ function DocumentLibrary({
   onSyncNow,
   onOverwriteCloud,
   onUseCloudCopy,
+  navigationState,
+  onNavigationStateChange,
 }: DocumentLibraryProps) {
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFolder, setSelectedFolder] = useState<FolderView>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState<SortOption>('newest');
+  const initialScrollYRef = useRef(navigationState.scrollY);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState<'success' | 'error'>('success');
+  const selectedFolder = navigationState.selectedView;
+  const searchQuery = navigationState.searchQuery;
+  const sortOption = navigationState.sortOption;
+  const setNavigationState = (
+    patch: Partial<LibraryNavigationState>,
+  ) => {
+    onNavigationStateChange({ ...navigationState, ...patch });
+  };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: initialScrollYRef.current });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const vocabularyItems = getVocabularyItems();
   const favoriteSentences = getFavoriteSentences();
   const vocabularyCountByDocument = useMemo(() => {
@@ -195,6 +237,48 @@ function DocumentLibrary({
   const formattedLastSyncedAt = cloudSyncView.lastSyncedAt
     ? formatDate(cloudSyncView.lastSyncedAt)
     : null;
+  const systemYearsByCollection = useMemo(() => {
+    const yearsByCollection = new Map<string, string[]>();
+
+    for (const collection of systemCollections) {
+      const years = new Set(
+        documents
+          .filter(
+            (document) =>
+              document.origin === 'system' &&
+              document.systemCollectionId === collection.id,
+          )
+          .map(getSystemDocumentYear)
+          .filter((year): year is string => Boolean(year)),
+      );
+
+      yearsByCollection.set(
+        collection.id,
+        [...years].sort((a, b) => Number(b) - Number(a)),
+      );
+    }
+
+    return yearsByCollection;
+  }, [documents, systemCollections]);
+  const childFoldersByParent = useMemo(() => {
+    const children = new Map<string | undefined, Folder[]>();
+
+    for (const folder of folders) {
+      const siblings = children.get(folder.parentId) ?? [];
+      siblings.push(folder);
+      children.set(folder.parentId, siblings);
+    }
+
+    for (const siblings of children.values()) {
+      siblings.sort(
+        (a, b) =>
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          a.name.localeCompare(b.name, undefined, { numeric: true }),
+      );
+    }
+
+    return children;
+  }, [folders]);
 
   const filteredDocuments = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -207,10 +291,13 @@ function DocumentLibrary({
         return document.origin !== 'system' && !document.folderId;
       }
 
-      if (selectedFolder.startsWith('system:')) {
+      const systemView = parseSystemView(selectedFolder);
+
+      if (systemView) {
         return (
           document.origin === 'system' &&
-          document.systemCollectionId === selectedFolder.slice(7)
+          document.systemCollectionId === systemView.collectionId &&
+          (!systemView.year || getSystemDocumentYear(document) === systemView.year)
         );
       }
 
@@ -240,8 +327,16 @@ function DocumentLibrary({
       return;
     }
 
-    const folder = createFolder(folderName);
-    setSelectedFolder(folder.id);
+    const parentId = folders.some((folder) => folder.id === selectedFolder)
+      ? selectedFolder
+      : undefined;
+    const folder = createFolder(folderName, parentId);
+    setNavigationState({
+      selectedView: folder.id,
+      expandedFolderIds: parentId
+        ? [...new Set([...navigationState.expandedFolderIds, parentId])]
+        : navigationState.expandedFolderIds,
+    });
     onLibraryChange();
     showStatus('success', `Created folder "${folder.name}".`);
   };
@@ -260,7 +355,7 @@ function DocumentLibrary({
 
   const handleDeleteFolder = (folder: Folder) => {
     const confirmed = window.confirm(
-      `Delete folder "${folder.name}"? Documents inside it will become unfiled.`,
+      `Delete folder "${folder.name}"? Its documents and subfolders will move up one level.`,
     );
 
     if (!confirmed) {
@@ -268,7 +363,7 @@ function DocumentLibrary({
     }
 
     deleteFolder(folder.id);
-    setSelectedFolder('all');
+    setNavigationState({ selectedView: folder.parentId ?? 'all' });
     onLibraryChange();
     showStatus('success', 'Folder deleted. Documents were kept.');
   };
@@ -289,6 +384,86 @@ function DocumentLibrary({
     moveDocumentToFolder(documentId, folderId || undefined);
     onLibraryChange();
     showStatus('success', 'Document moved.');
+  };
+
+  const toggleFolderExpanded = (folderId: string) => {
+    const expanded = navigationState.expandedFolderIds.includes(folderId);
+    setNavigationState({
+      expandedFolderIds: expanded
+        ? navigationState.expandedFolderIds.filter((id) => id !== folderId)
+        : [...navigationState.expandedFolderIds, folderId],
+    });
+  };
+
+  const toggleSystemCollectionExpanded = (collectionId: string) => {
+    const expanded =
+      navigationState.expandedSystemCollectionIds.includes(collectionId);
+    setNavigationState({
+      expandedSystemCollectionIds: expanded
+        ? navigationState.expandedSystemCollectionIds.filter(
+            (id) => id !== collectionId,
+          )
+        : [...navigationState.expandedSystemCollectionIds, collectionId],
+    });
+  };
+
+  const renderFolderNodes = (
+    parentId: string | undefined,
+    depth = 0,
+  ): ReactNode => {
+    return (childFoldersByParent.get(parentId) ?? []).map((folder) => {
+      const hasChildren = (childFoldersByParent.get(folder.id) ?? []).length > 0;
+      const isExpanded = navigationState.expandedFolderIds.includes(folder.id);
+
+      return (
+        <div key={folder.id}>
+          <div
+            className="group flex items-center gap-1"
+            style={{ paddingLeft: `${depth * 14}px` }}
+          >
+            <button
+              type="button"
+              onClick={() => hasChildren && toggleFolderExpanded(folder.id)}
+              className={`h-8 w-6 shrink-0 rounded text-xs text-slate-500 hover:bg-slate-100 ${
+                hasChildren ? '' : 'invisible'
+              }`}
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${folder.name}`}
+            >
+              {isExpanded ? '▾' : '▸'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setNavigationState({ selectedView: folder.id })}
+              className={`min-w-0 flex-1 truncate rounded-md px-2 py-2 text-left text-sm transition ${
+                selectedFolder === folder.id
+                  ? 'bg-cyan-50 font-semibold text-cyan-950'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+              title={getFolderOptionLabel(folder, folders)}
+            >
+              {folder.name}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRenameFolder(folder)}
+              className="rounded-md px-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteFolder(folder)}
+              className="rounded-md px-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+            >
+              Del
+            </button>
+          </div>
+          {hasChildren && isExpanded
+            ? renderFolderNodes(folder.id, depth + 1)
+            : null}
+        </div>
+      );
+    });
   };
 
   const handleExportLibrary = () => {
@@ -375,10 +550,9 @@ function DocumentLibrary({
           paragraphs,
           sentences,
           currentSentenceIndex: 0,
-          folderId:
-            selectedFolder === 'all' || selectedFolder === 'unfiled'
-              ? undefined
-              : selectedFolder,
+          folderId: folders.some((folder) => folder.id === selectedFolder)
+            ? selectedFolder
+            : undefined,
         });
       } catch (error) {
         failedFiles.push(`${file.name} (${getErrorMessage(error)})`);
@@ -628,7 +802,7 @@ function DocumentLibrary({
             <nav className="space-y-1 p-2">
               <button
                 type="button"
-                onClick={() => setSelectedFolder('all')}
+                onClick={() => setNavigationState({ selectedView: 'all' })}
                 className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                   selectedFolder === 'all'
                     ? 'bg-cyan-50 font-semibold text-cyan-950'
@@ -644,27 +818,75 @@ function DocumentLibrary({
                 </p>
               ) : null}
               {systemCollections.map((collection) => {
-                const collectionView = `system:${collection.id}`;
+                const collectionView = getSystemCollectionView(collection.id);
+                const years = systemYearsByCollection.get(collection.id) ?? [];
+                const isExpanded =
+                  navigationState.expandedSystemCollectionIds.includes(
+                    collection.id,
+                  );
 
                 return (
-                  <button
-                    key={collection.id}
-                    type="button"
-                    onClick={() => setSelectedFolder(collectionView)}
-                    className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
-                      selectedFolder === collectionView
-                        ? 'bg-violet-50 font-semibold text-violet-950'
-                        : 'text-slate-700 hover:bg-violet-50'
-                    }`}
-                  >
-                    {collection.title}
-                  </button>
+                  <div key={collection.id}>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          years.length > 0 &&
+                          toggleSystemCollectionExpanded(collection.id)
+                        }
+                        className={`h-8 w-6 shrink-0 rounded text-xs text-violet-600 hover:bg-violet-50 ${
+                          years.length > 0 ? '' : 'invisible'
+                        }`}
+                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${collection.title}`}
+                      >
+                        {isExpanded ? '▾' : '▸'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNavigationState({ selectedView: collectionView })
+                        }
+                        className={`min-w-0 flex-1 rounded-md px-2 py-2 text-left text-sm transition ${
+                          selectedFolder === collectionView
+                            ? 'bg-violet-50 font-semibold text-violet-950'
+                            : 'text-slate-700 hover:bg-violet-50'
+                        }`}
+                      >
+                        {collection.title}
+                      </button>
+                    </div>
+                    {isExpanded
+                      ? years.map((year) => {
+                          const yearView = getSystemYearView(
+                            collection.id,
+                            year,
+                          );
+
+                          return (
+                            <button
+                              key={year}
+                              type="button"
+                              onClick={() =>
+                                setNavigationState({ selectedView: yearView })
+                              }
+                              className={`ml-7 w-[calc(100%_-_1.75rem)] rounded-md px-3 py-2 text-left text-sm transition ${
+                                selectedFolder === yearView
+                                  ? 'bg-violet-50 font-semibold text-violet-950'
+                                  : 'text-slate-600 hover:bg-violet-50'
+                              }`}
+                            >
+                              {year}
+                            </button>
+                          );
+                        })
+                      : null}
+                  </div>
                 );
               })}
 
               <button
                 type="button"
-                onClick={() => setSelectedFolder('unfiled')}
+                onClick={() => setNavigationState({ selectedView: 'unfiled' })}
                 className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                   selectedFolder === 'unfiled'
                     ? 'bg-cyan-50 font-semibold text-cyan-950'
@@ -674,35 +896,7 @@ function DocumentLibrary({
                 Unfiled
               </button>
 
-              {folders.map((folder) => (
-                <div key={folder.id} className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFolder(folder.id)}
-                    className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-left text-sm transition ${
-                      selectedFolder === folder.id
-                        ? 'bg-cyan-50 font-semibold text-cyan-950'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {folder.name}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRenameFolder(folder)}
-                    className="rounded-md px-2 text-xs font-semibold text-slate-500 hover:bg-slate-100"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteFolder(folder)}
-                    className="rounded-md px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                  >
-                    Del
-                  </button>
-                </div>
-              ))}
+              {renderFolderNodes(undefined)}
             </nav>
           </aside>
 
@@ -712,14 +906,18 @@ function DocumentLibrary({
                 <input
                   type="search"
                   value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onChange={(event) =>
+                    setNavigationState({ searchQuery: event.target.value })
+                  }
                   className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 md:max-w-md"
                   placeholder="Search title or text"
                 />
                 <select
                   value={sortOption}
                   onChange={(event) =>
-                    setSortOption(event.target.value as SortOption)
+                    setNavigationState({
+                      sortOption: event.target.value as SortOption,
+                    })
                   }
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
                 >
@@ -774,7 +972,7 @@ function DocumentLibrary({
                               </span>
                             ) : null}
                           </div>
-                          <dl className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-5">
+                          <dl className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-4 xl:grid-cols-7">
                             <div>
                               <dt className="font-medium text-slate-500">
                                 Created
@@ -813,6 +1011,22 @@ function DocumentLibrary({
                                 {favoriteCountByDocument[document.id] ?? 0}
                               </dd>
                             </div>
+                            <div>
+                              <dt className="font-medium text-slate-500">
+                                Reads
+                              </dt>
+                              <dd>{document.readCount ?? 0}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-500">
+                                Last opened
+                              </dt>
+                              <dd>
+                                {document.lastOpenedAt
+                                  ? formatDate(document.lastOpenedAt)
+                                  : 'Never'}
+                              </dd>
+                            </div>
                           </dl>
                         </div>
 
@@ -832,14 +1046,17 @@ function DocumentLibrary({
                               <option value="">Unfiled</option>
                               {folders.map((folder) => (
                                 <option key={folder.id} value={folder.id}>
-                                  {folder.name}
+                                  {getFolderOptionLabel(folder, folders)}
                                 </option>
                               ))}
                             </select>
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => onOpenDocument(document)}
+                            onClick={() => {
+                              setNavigationState({ scrollY: window.scrollY });
+                              onOpenDocument(document);
+                            }}
                             className="inline-flex h-10 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
                           >
                             Open

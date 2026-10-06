@@ -674,24 +674,36 @@ export function deleteFolder(id: string) {
 
 const READING_SESSION_GAP_MS = 30 * 60 * 1000;
 
+export function startsNewReadingSession(
+  lastOpenedAt: string | undefined,
+  openedAt: string,
+) {
+  const openedAtMs = new Date(openedAt).getTime();
+  const lastOpenedAtMs = lastOpenedAt
+    ? new Date(lastOpenedAt).getTime()
+    : Number.NaN;
+
+  return (
+    !Number.isFinite(lastOpenedAtMs) ||
+    !Number.isFinite(openedAtMs) ||
+    openedAtMs - lastOpenedAtMs >= READING_SESSION_GAP_MS
+  );
+}
+
 export function recordDocumentOpened(
   id: string,
   openedAt = new Date().toISOString(),
 ) {
   let updatedDocument: Document | null = null;
-  const openedAtMs = new Date(openedAt).getTime();
   const nextDocuments = getStoredDocuments().map((document) => {
     if (document.id !== id) {
       return document;
     }
 
-    const lastOpenedAtMs = document.lastOpenedAt
-      ? new Date(document.lastOpenedAt).getTime()
-      : Number.NaN;
-    const startsNewSession =
-      !Number.isFinite(lastOpenedAtMs) ||
-      !Number.isFinite(openedAtMs) ||
-      openedAtMs - lastOpenedAtMs >= READING_SESSION_GAP_MS;
+    const startsNewSession = startsNewReadingSession(
+      document.lastOpenedAt,
+      openedAt,
+    );
 
     updatedDocument = normalizeDocument({
       ...document,

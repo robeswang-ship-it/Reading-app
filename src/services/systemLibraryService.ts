@@ -28,8 +28,8 @@ type StateRow = {
   document_id: string;
   current_sentence_index: number;
   sentence_notes: unknown;
-  read_count: number;
-  last_opened_at: string | null;
+  read_count?: number;
+  last_opened_at?: string | null;
   updated_at: string;
 };
 
@@ -71,6 +71,38 @@ async function fetchRows<T>(
   return data ?? [];
 }
 
+function isReadingActivitySchemaMissing(message: string) {
+  return (
+    message.includes('read_count') ||
+    message.includes('last_opened_at') ||
+    message.includes('schema cache')
+  );
+}
+
+async function fetchStateRows(userId: string) {
+  const query = await supabase
+    .from('user_system_document_states')
+    .select(
+      'document_id, current_sentence_index, sentence_notes, read_count, last_opened_at, updated_at',
+    )
+    .eq('user_id', userId);
+
+  if (!query.error) {
+    return (query.data ?? []) as StateRow[];
+  }
+
+  if (!isReadingActivitySchemaMissing(query.error.message)) {
+    throw new Error(getMissingSchemaMessage(query.error.message));
+  }
+
+  return fetchRows<StateRow>(
+    supabase
+      .from('user_system_document_states')
+      .select('document_id, current_sentence_index, sentence_notes, updated_at')
+      .eq('user_id', userId),
+  );
+}
+
 export async function fetchSystemLibrary(
   userId: string,
 ): Promise<SystemLibraryData> {
@@ -91,14 +123,7 @@ export async function fetchSystemLibrary(
           .order('sort_order')
           .order('created_at'),
       ),
-      fetchRows<StateRow>(
-        supabase
-          .from('user_system_document_states')
-          .select(
-            'document_id, current_sentence_index, sentence_notes, read_count, last_opened_at, updated_at',
-          )
-          .eq('user_id', userId),
-      ),
+      fetchStateRows(userId),
     ]);
 
   const collections = collectionRows.map((row) => ({
@@ -182,7 +207,27 @@ export async function saveSystemDocumentState(
     { onConflict: 'user_id,document_id' },
   );
 
-  if (error) {
+  if (!error) {
+    return;
+  }
+
+  if (!isReadingActivitySchemaMissing(error.message)) {
     throw new Error(error.message);
+  }
+
+  const { error: fallbackError } = await supabase
+    .from('user_system_document_states')
+    .upsert(
+      {
+        user_id: userId,
+        document_id: state.documentId,
+        current_sentence_index: state.currentSentenceIndex,
+        sentence_notes: state.sentenceNotes,
+      },
+      { onConflict: 'user_id,document_id' },
+    );
+
+  if (fallbackError) {
+    throw new Error(fallbackError.message);
   }
 }

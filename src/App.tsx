@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import ReaderPage from './ReaderPage';
 import AuthPage from './components/AuthPage';
 import DocumentLibrary from './components/DocumentLibrary';
+import type { LibraryNavigationState } from './components/DocumentLibrary';
 import FavoritesPage from './components/FavoritesPage';
 import ReviewSentencesPage from './components/ReviewSentencesPage';
 import ReviewVocabularyPage from './components/ReviewVocabularyPage';
@@ -19,8 +20,14 @@ import {
   generateDocumentId,
   getDocuments,
   getFolders,
+  recordDocumentOpened,
   saveDocument,
 } from './utils/storage';
+import {
+  getDocumentReturnView,
+  getFolderPath,
+  parseSystemView,
+} from './utils/libraryNavigation';
 
 type AppRoute =
   | 'library'
@@ -36,6 +43,15 @@ function App() {
   const [documents, setDocuments] = useState<Document[]>(() => getDocuments());
   const [folders, setFolders] = useState<Folder[]>(() => getFolders());
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
+  const [libraryNavigation, setLibraryNavigation] =
+    useState<LibraryNavigationState>({
+      selectedView: 'all',
+      searchQuery: '',
+      sortOption: 'newest',
+      scrollY: 0,
+      expandedFolderIds: [],
+      expandedSystemCollectionIds: [],
+    });
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -101,7 +117,19 @@ function App() {
   };
 
   const handleOpenDocument = (document: Document) => {
-    setActiveDocument(document);
+    if (document.origin === 'system') {
+      const nextState = systemLibrary.recordOpened(document.id);
+      setActiveDocument({
+        ...document,
+        readCount: nextState.readCount,
+        lastOpenedAt: nextState.lastOpenedAt,
+      });
+    } else {
+      const updatedDocument = recordDocumentOpened(document.id);
+      setActiveDocument(updatedDocument ?? document);
+      refreshLibrary();
+    }
+
     setRoute('reader');
   };
 
@@ -117,6 +145,45 @@ function App() {
 
   const handleBackToLibrary = () => {
     refreshLibrary();
+    setLibraryNavigation((current) => ({
+      ...current,
+      selectedView: 'all',
+      scrollY: 0,
+    }));
+    setRoute('library');
+  };
+
+  const handleBackToDocuments = () => {
+    if (!activeDocument) {
+      handleBackToLibrary();
+      return;
+    }
+
+    const selectedView = getDocumentReturnView(activeDocument);
+    const systemView = parseSystemView(selectedView);
+    const folderPathIds =
+      activeDocument.origin === 'system'
+        ? []
+        : getFolderPath(activeDocument.folderId, folders).map(
+            (folder) => folder.id,
+          );
+    refreshLibrary();
+    setLibraryNavigation((current) => ({
+      ...current,
+      selectedView,
+      scrollY: current.selectedView === selectedView ? current.scrollY : 0,
+      expandedFolderIds: [
+        ...new Set([...current.expandedFolderIds, ...folderPathIds]),
+      ],
+      expandedSystemCollectionIds: systemView
+        ? [
+            ...new Set([
+              ...current.expandedSystemCollectionIds,
+              systemView.collectionId,
+            ]),
+          ]
+        : current.expandedSystemCollectionIds,
+    }));
     setRoute('library');
   };
 
@@ -173,6 +240,7 @@ function App() {
     return (
       <ReaderPage
         document={activeDocument}
+        onBackToDocuments={handleBackToDocuments}
         onBackToLibrary={handleBackToLibrary}
         onDocumentChange={setActiveDocument}
         onSystemProgressChange={systemLibrary.updateProgress}
@@ -222,6 +290,8 @@ function App() {
       onSyncNow={uploadThisDevice}
       onOverwriteCloud={overwriteCloudWithThisDevice}
       onUseCloudCopy={useCloudCopy}
+      navigationState={libraryNavigation}
+      onNavigationStateChange={setLibraryNavigation}
     />
   );
 }
