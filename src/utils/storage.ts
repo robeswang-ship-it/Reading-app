@@ -9,6 +9,7 @@ import type {
   VocabularyItem,
 } from '../types';
 import { splitIntoParagraphTexts, splitIntoSentences } from './sentenceSplitter';
+import type { VocabularyImportEntry } from './vocabularyImport';
 
 const DOCUMENTS_KEY = 'ai-intensive-reading:documents';
 const FOLDERS_KEY = 'ai-intensive-reading:folders';
@@ -167,6 +168,7 @@ function isVocabularyItem(value: unknown): value is VocabularyItem {
   return (
     typeof value.id === 'string' &&
     typeof value.word === 'string' &&
+    (value.originalForm === undefined || typeof value.originalForm === 'string') &&
     typeof value.documentId === 'string' &&
     typeof value.documentTitle === 'string' &&
     typeof value.sentenceId === 'string' &&
@@ -180,6 +182,11 @@ function isVocabularyItem(value: unknown): value is VocabularyItem {
     (value.familiarity === undefined ||
       typeof value.familiarity === 'number') &&
     (value.meaning === undefined || typeof value.meaning === 'string') &&
+    (value.partOfSpeech === undefined || typeof value.partOfSpeech === 'string') &&
+    (value.englishExplanation === undefined ||
+      typeof value.englishExplanation === 'string') &&
+    (value.inflectionExplanation === undefined ||
+      typeof value.inflectionExplanation === 'string') &&
     (value.phonetic === undefined || typeof value.phonetic === 'string') &&
     (value.example === undefined || typeof value.example === 'string') &&
     (value.note === undefined || typeof value.note === 'string')
@@ -407,9 +414,13 @@ function normalizeVocabularyItem(item: VocabularyItem): VocabularyItem {
   return {
     ...item,
     word: item.word.trim(),
+    originalForm: item.originalForm?.trim() || undefined,
     reviewCount: Math.max(item.reviewCount ?? 0, 0),
     familiarity: Math.min(Math.max(item.familiarity ?? 0, 0), 5),
     meaning: item.meaning?.trim() || undefined,
+    partOfSpeech: item.partOfSpeech?.trim() || undefined,
+    englishExplanation: item.englishExplanation?.trim() || undefined,
+    inflectionExplanation: item.inflectionExplanation?.trim() || undefined,
     phonetic: item.phonetic?.trim() || undefined,
     example: item.example?.trim() || undefined,
     note: item.note?.trim() || undefined,
@@ -645,6 +656,47 @@ export function renameFolder(id: string, name: string) {
   );
 }
 
+export function moveFolderToFolder(id: string, parentId?: string) {
+  const folders = getStoredFolders();
+  const folder = folders.find((item) => item.id === id);
+
+  if (!folder || parentId === id) {
+    return false;
+  }
+
+  const folderById = new Map(folders.map((item) => [item.id, item]));
+  const validParentId = parentId && folderById.has(parentId)
+    ? parentId
+    : undefined;
+  let ancestorId = validParentId;
+
+  while (ancestorId) {
+    if (ancestorId === id) {
+      return false;
+    }
+
+    ancestorId = folderById.get(ancestorId)?.parentId;
+  }
+
+  const nextSortOrder = folders
+    .filter(
+      (item) => item.id !== id && item.parentId === validParentId,
+    )
+    .reduce((maximum, item) => Math.max(maximum, item.sortOrder ?? 0), -1) + 1;
+
+  writeJsonArray(
+    FOLDERS_KEY,
+    normalizeFolders(
+      folders.map((item) =>
+        item.id === id
+          ? { ...item, parentId: validParentId, sortOrder: nextSortOrder }
+          : item,
+      ),
+    ),
+  );
+  return true;
+}
+
 export function deleteFolder(id: string) {
   const folders = getStoredFolders();
   const deletedFolder = folders.find((folder) => folder.id === id);
@@ -739,7 +791,6 @@ export function addVocabularyItem(
   const existingItems = getStoredVocabularyItems();
   const duplicate = existingItems.find(
     (existingItem) =>
-      existingItem.sentenceId === item.sentenceId &&
       existingItem.word.toLowerCase() === normalizedWord.toLowerCase(),
   );
 
@@ -758,6 +809,50 @@ export function addVocabularyItem(
 
   writeJsonArray(VOCABULARY_KEY, [nextItem, ...existingItems]);
   return { added: true, item: nextItem };
+}
+
+export function importVocabularyItems(entries: VocabularyImportEntry[]) {
+  const existingItems = getStoredVocabularyItems();
+  const existingWords = new Set(
+    existingItems.map((item) => item.word.toLocaleLowerCase()),
+  );
+  const importedItems: VocabularyItem[] = [];
+  const createdAt = new Date().toISOString();
+
+  for (const entry of entries) {
+    const word = entry.word.trim();
+    const key = word.toLocaleLowerCase();
+
+    if (!word || existingWords.has(key)) {
+      continue;
+    }
+
+    const id = generateDocumentId();
+    importedItems.push(
+      normalizeVocabularyItem({
+        id,
+        word,
+        meaning: entry.meaning,
+        documentId: '',
+        documentTitle: '',
+        sentenceId: `imported:${id}`,
+        sentenceText: '',
+        createdAt,
+        reviewCount: 0,
+        familiarity: 0,
+      }),
+    );
+    existingWords.add(key);
+  }
+
+  if (importedItems.length > 0) {
+    writeJsonArray(VOCABULARY_KEY, [...importedItems, ...existingItems]);
+  }
+
+  return {
+    importedCount: importedItems.length,
+    skippedCount: entries.length - importedItems.length,
+  };
 }
 
 export function getVocabularyReviewQueue(): VocabularyItem[] {
@@ -814,21 +909,65 @@ export function updateVocabularyNote(id: string, note: string) {
 
 export function updateVocabularyDetails(
   id: string,
-  fields: Pick<VocabularyItem, 'meaning' | 'phonetic' | 'example' | 'note'>,
+  fields: Partial<
+    Pick<
+      VocabularyItem,
+      | 'word'
+      | 'originalForm'
+      | 'meaning'
+      | 'partOfSpeech'
+      | 'englishExplanation'
+      | 'inflectionExplanation'
+      | 'phonetic'
+      | 'example'
+      | 'note'
+    >
+  >,
 ) {
+  const items = getStoredVocabularyItems();
+  const targetItem = items.find((item) => item.id === id);
+
+  if (!targetItem) {
+    return;
+  }
+
+  const updatedItem = normalizeVocabularyItem({ ...targetItem, ...fields });
+  const duplicate = fields.word
+    ? items.find(
+        (item) =>
+          item.id !== id &&
+          item.word.toLocaleLowerCase() ===
+            updatedItem.word.toLocaleLowerCase(),
+      )
+    : undefined;
+
+  if (duplicate) {
+    const mergedItem = normalizeVocabularyItem({
+      ...duplicate,
+      meaning: updatedItem.meaning || duplicate.meaning,
+      partOfSpeech: updatedItem.partOfSpeech || duplicate.partOfSpeech,
+      englishExplanation:
+        updatedItem.englishExplanation || duplicate.englishExplanation,
+      inflectionExplanation:
+        updatedItem.inflectionExplanation || duplicate.inflectionExplanation,
+      originalForm: updatedItem.originalForm || duplicate.originalForm,
+      phonetic: updatedItem.phonetic || duplicate.phonetic,
+      example: updatedItem.example || duplicate.example,
+      note: duplicate.note || updatedItem.note,
+    });
+
+    writeJsonArray(
+      VOCABULARY_KEY,
+      items
+        .filter((item) => item.id !== id)
+        .map((item) => (item.id === duplicate.id ? mergedItem : item)),
+    );
+    return;
+  }
+
   writeJsonArray(
     VOCABULARY_KEY,
-    getStoredVocabularyItems().map((item) =>
-      item.id === id
-        ? normalizeVocabularyItem({
-            ...item,
-            meaning: fields.meaning,
-            phonetic: fields.phonetic,
-            example: fields.example,
-            note: fields.note,
-          })
-        : item,
-    ),
+    items.map((item) => (item.id === id ? updatedItem : item)),
   );
 }
 

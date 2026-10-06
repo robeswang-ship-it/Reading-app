@@ -13,7 +13,18 @@ type SentenceDetailProps = {
   ) => void;
   onAddVocabulary?: (
     details: Partial<
-      Pick<VocabularyItem, 'meaning' | 'phonetic' | 'example' | 'note'>
+      Pick<
+        VocabularyItem,
+        | 'word'
+        | 'originalForm'
+        | 'meaning'
+        | 'partOfSpeech'
+        | 'englishExplanation'
+        | 'inflectionExplanation'
+        | 'phonetic'
+        | 'example'
+        | 'note'
+      >
     >,
   ) => void;
   onSelectWord: (word: string) => void;
@@ -324,6 +335,7 @@ function SentenceDetail({
             <WordPanel
               embedded
               word={selectedWord}
+              contextSentence={sentence?.text}
               vocabularyStatus={vocabularyStatus}
               onAddVocabulary={onAddVocabulary}
             />

@@ -287,7 +287,18 @@ function ReaderPage({
 
   const handleAddVocabulary = (
     details: Partial<
-      Pick<VocabularyItem, 'meaning' | 'phonetic' | 'example' | 'note'>
+      Pick<
+        VocabularyItem,
+        | 'word'
+        | 'originalForm'
+        | 'meaning'
+        | 'partOfSpeech'
+        | 'englishExplanation'
+        | 'inflectionExplanation'
+        | 'phonetic'
+        | 'example'
+        | 'note'
+      >
     >,
   ) => {
     if (!selectedSentence || !selectedWord) {
@@ -295,12 +306,16 @@ function ReaderPage({
     }
 
     const result = addVocabularyItem({
-      word: selectedWord,
+      word: details.word || selectedWord,
+      originalForm: details.originalForm,
       documentId: document.id,
       documentTitle: document.title,
       sentenceId: selectedSentence.id,
       sentenceText: selectedSentence.text,
       meaning: details.meaning,
+      partOfSpeech: details.partOfSpeech,
+      englishExplanation: details.englishExplanation,
+      inflectionExplanation: details.inflectionExplanation,
       phonetic: details.phonetic,
       example: details.example,
       note: details.note,
@@ -531,6 +546,7 @@ function ReaderPage({
           {readingMode === 'extensive' ? (
             <WordPanel
               word={selectedWord}
+              contextSentence={selectedSentence?.text}
               vocabularyStatus={vocabularyStatus}
               onAddVocabulary={handleAddVocabulary}
             />

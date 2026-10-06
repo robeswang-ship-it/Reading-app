@@ -28,9 +28,15 @@ import {
   importLibrary,
   isLibraryExport,
   moveDocumentToFolder,
+  moveFolderToFolder,
   renameDocument,
   renameFolder,
 } from '../utils/storage';
+
+type DraggedLibraryItem = {
+  type: 'document' | 'folder';
+  id: string;
+};
 
 export type FolderView = 'all' | 'unfiled' | string;
 export type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
@@ -204,6 +210,8 @@ function DocumentLibrary({
   const initialScrollYRef = useRef(navigationState.scrollY);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState<'success' | 'error'>('success');
+  const [draggedItem, setDraggedItem] = useState<DraggedLibraryItem | null>(null);
+  const initializedSystemExpansionRef = useRef(false);
   const selectedFolder = navigationState.selectedView;
   const searchQuery = navigationState.searchQuery;
   const sortOption = navigationState.sortOption;
@@ -220,6 +228,26 @@ function DocumentLibrary({
 
     return () => window.cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    if (
+      initializedSystemExpansionRef.current ||
+      systemCollections.length === 0
+    ) {
+      return;
+    }
+
+    initializedSystemExpansionRef.current = true;
+    onNavigationStateChange({
+      ...navigationState,
+      expandedSystemCollectionIds: [
+        ...new Set([
+          ...navigationState.expandedSystemCollectionIds,
+          ...systemCollections.map((collection) => collection.id),
+        ]),
+      ],
+    });
+  }, [navigationState, onNavigationStateChange, systemCollections]);
   const vocabularyItems = getVocabularyItems();
   const favoriteSentences = getFavoriteSentences();
   const vocabularyCountByDocument = useMemo(() => {
@@ -386,6 +414,24 @@ function DocumentLibrary({
     showStatus('success', 'Document moved.');
   };
 
+  const handleDropIntoFolder = (folderId?: string) => {
+    if (!draggedItem) {
+      return;
+    }
+
+    if (draggedItem.type === 'document') {
+      moveDocumentToFolder(draggedItem.id, folderId);
+      showStatus('success', 'Document moved.');
+    } else if (moveFolderToFolder(draggedItem.id, folderId)) {
+      showStatus('success', 'Folder moved.');
+    } else {
+      showStatus('error', 'That folder cannot be moved there.');
+    }
+
+    setDraggedItem(null);
+    onLibraryChange();
+  };
+
   const toggleFolderExpanded = (folderId: string) => {
     const expanded = navigationState.expandedFolderIds.includes(folderId);
     setNavigationState({
@@ -418,8 +464,28 @@ function DocumentLibrary({
       return (
         <div key={folder.id}>
           <div
-            className="group flex items-center gap-1"
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = 'move';
+              setDraggedItem({ type: 'folder', id: folder.id });
+            }}
+            onDragEnd={() => setDraggedItem(null)}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleDropIntoFolder(folder.id);
+            }}
+            className={`group flex items-center gap-1 rounded-md ${
+              draggedItem?.type === 'folder' && draggedItem.id === folder.id
+                ? 'opacity-50'
+                : ''
+            }`}
             style={{ paddingLeft: `${depth * 14}px` }}
+            title="Drag a personal document or folder here to move it"
           >
             <button
               type="button"
@@ -803,6 +869,11 @@ function DocumentLibrary({
               <button
                 type="button"
                 onClick={() => setNavigationState({ selectedView: 'all' })}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  handleDropIntoFolder();
+                }}
                 className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                   selectedFolder === 'all'
                     ? 'bg-cyan-50 font-semibold text-cyan-950'
@@ -887,6 +958,11 @@ function DocumentLibrary({
               <button
                 type="button"
                 onClick={() => setNavigationState({ selectedView: 'unfiled' })}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  handleDropIntoFolder();
+                }}
                 className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                   selectedFolder === 'unfiled'
                     ? 'bg-cyan-50 font-semibold text-cyan-950'
@@ -952,7 +1028,26 @@ function DocumentLibrary({
                       return (
                         <li
                           key={document.id}
+                          draggable={document.origin !== 'system'}
+                          onDragStart={(event) => {
+                            if (document.origin === 'system') {
+                              event.preventDefault();
+                              return;
+                            }
+
+                            event.dataTransfer.effectAllowed = 'move';
+                            setDraggedItem({
+                              type: 'document',
+                              id: document.id,
+                            });
+                          }}
+                          onDragEnd={() => setDraggedItem(null)}
                           className="grid gap-4 p-4 transition hover:bg-slate-50 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center"
+                          title={
+                            document.origin === 'system'
+                              ? undefined
+                              : 'Drag this document onto a folder to move it'
+                          }
                         >
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">

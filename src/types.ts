@@ -68,6 +68,7 @@ export type SystemDocumentState = {
 export type VocabularyItem = {
   id: string;
   word: string;
+  originalForm?: string;
   documentId: string;
   documentTitle: string;
   sentenceId: string;
@@ -77,6 +78,9 @@ export type VocabularyItem = {
   lastReviewedAt?: string;
   familiarity: number;
   meaning?: string;
+  partOfSpeech?: string;
+  englishExplanation?: string;
+  inflectionExplanation?: string;
   phonetic?: string;
   example?: string;
   note?: string;

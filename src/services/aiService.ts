@@ -12,7 +12,9 @@ type SentenceAnalysis = {
   }>;
 };
 
-type WordLookup = {
+export type WordLookup = {
+  lemma: string;
+  inflectionExplanation: string;
   chineseMeaning: string;
   partOfSpeech: string;
   englishExplanation: string;
@@ -77,17 +79,6 @@ function mockSentenceAnalysis(sentence: string): SentenceAnalysis {
         explanation: '常用于描述需要高度专注或投入的学习与训练。',
       },
     ],
-  };
-}
-
-function mockWordLookup(word: string): WordLookup {
-  return {
-    chineseMeaning: `模拟中文释义："${word}"`,
-    partOfSpeech: 'noun',
-    englishExplanation: `A mock learner-friendly explanation for "${word}".`,
-    meaning: `模拟中文释义："${word}"`,
-    phonetic: '/mock/',
-    example: `This is a mock example sentence using "${word}".`,
   };
 }
 
@@ -202,11 +193,15 @@ function isWordLookup(value: unknown): value is WordLookup {
   return (
     typeof value === 'object' &&
     value !== null &&
+    'lemma' in value &&
+    'inflectionExplanation' in value &&
     'chineseMeaning' in value &&
     'partOfSpeech' in value &&
     'englishExplanation' in value &&
     'phonetic' in value &&
     'example' in value &&
+    typeof value.lemma === 'string' &&
+    typeof value.inflectionExplanation === 'string' &&
     typeof value.chineseMeaning === 'string' &&
     typeof value.partOfSpeech === 'string' &&
     typeof value.englishExplanation === 'string' &&
@@ -286,7 +281,10 @@ Rules:
   }
 }
 
-export async function lookupWord(word: string): Promise<WordLookup> {
+export async function lookupWord(
+  word: string,
+  contextSentence?: string,
+): Promise<WordLookup> {
   const prompt = `You are an English dictionary assistant.
 
 Explain the following word for an English learner.
@@ -294,8 +292,12 @@ Explain the following word for an English learner.
 Word:
 "${word}"
 
+${contextSentence ? `Context sentence:\n"${contextSentence}"` : 'No context sentence is available.'}
+
 Return valid JSON only:
 {
+  "lemma": "dictionary base form of the selected word",
+  "inflectionExplanation": "brief Chinese explanation of the selected form, or an empty string when it is already the base form",
   "chineseMeaning": "中文释义",
   "partOfSpeech": "part of speech, e.g. noun / verb / adjective",
   "englishExplanation": "learner-friendly English explanation",
@@ -305,6 +307,9 @@ Return valid JSON only:
 
 Rules:
 - No extra text
+- lemma must be the correct dictionary headword: restore plurals, comparative forms, past tense, participles, and other inflections
+- Use the context sentence to choose the correct lemma, part of speech, and meaning
+- inflectionExplanation must be Chinese, for example“过去式和过去分词”; use an empty string for an uninflected headword
 - Chinese meaning must be written in Chinese
 - English explanation must be written in English
 - Keep explanation simple and useful
@@ -315,8 +320,7 @@ Rules:
     const rawContent = await callDeepSeek(prompt);
 
     if (!rawContent) {
-      await delay(500);
-      return mockWordLookup(word);
+      throw new Error('DeepSeek word lookup failed');
     }
 
     const parsedContent: unknown = safeParseJSON(rawContent);
@@ -329,6 +333,8 @@ Rules:
     }
 
     return {
+      lemma: word,
+      inflectionExplanation: '',
       chineseMeaning: rawContent,
       partOfSpeech: '解析失败',
       englishExplanation: 'Parsing failed. Please try again.',
@@ -336,9 +342,10 @@ Rules:
       phonetic: '/解析失败/',
       example: '解析失败，请重试',
     };
-  } catch {
-    await delay(500);
-    return mockWordLookup(word);
+  } catch (error) {
+    throw error instanceof Error
+      ? error
+      : new Error('DeepSeek word lookup failed');
   }
 }
 

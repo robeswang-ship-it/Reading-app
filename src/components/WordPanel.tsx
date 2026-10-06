@@ -4,11 +4,23 @@ import type { VocabularyItem } from '../types';
 
 type WordPanelProps = {
   word: string | null;
+  contextSentence?: string;
   vocabularyStatus?: string;
   embedded?: boolean;
   onAddVocabulary: (
     details: Partial<
-      Pick<VocabularyItem, 'meaning' | 'phonetic' | 'example' | 'note'>
+      Pick<
+        VocabularyItem,
+        | 'word'
+        | 'originalForm'
+        | 'meaning'
+        | 'partOfSpeech'
+        | 'englishExplanation'
+        | 'inflectionExplanation'
+        | 'phonetic'
+        | 'example'
+        | 'note'
+      >
     >,
   ) => void;
 };
@@ -104,11 +116,14 @@ async function pronounce(word: string) {
 
 function WordPanel({
   word,
+  contextSentence,
   vocabularyStatus,
   embedded = false,
   onAddVocabulary,
 }: WordPanelProps) {
   const [note, setNote] = useState('');
+  const [lemma, setLemma] = useState('');
+  const [inflectionExplanation, setInflectionExplanation] = useState('');
   const [meaning, setMeaning] = useState('');
   const [partOfSpeech, setPartOfSpeech] = useState('');
   const [englishExplanation, setEnglishExplanation] = useState('');
@@ -120,6 +135,8 @@ function WordPanel({
     let isCancelled = false;
 
     setNote('');
+    setLemma('');
+    setInflectionExplanation('');
     setMeaning('');
     setPartOfSpeech('');
     setEnglishExplanation('');
@@ -135,18 +152,28 @@ function WordPanel({
 
     const explainWord = async () => {
       setAiStatus('Looking up...');
-      const result = await lookupWord(word);
 
-      if (isCancelled) {
-        return;
+      try {
+        const result = await lookupWord(word, contextSentence);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setLemma(result.lemma || word);
+        setInflectionExplanation(result.inflectionExplanation);
+        setMeaning(result.chineseMeaning || result.meaning);
+        setPartOfSpeech(result.partOfSpeech);
+        setEnglishExplanation(result.englishExplanation);
+        setPhonetic(result.phonetic);
+        setExample(result.example);
+        setAiStatus('AI explanation ready.');
+      } catch {
+        if (!isCancelled) {
+          setLemma(word);
+          setAiStatus('AI lookup failed. Please select the word again to retry.');
+        }
       }
-
-      setMeaning(result.chineseMeaning || result.meaning);
-      setPartOfSpeech(result.partOfSpeech);
-      setEnglishExplanation(result.englishExplanation);
-      setPhonetic(result.phonetic);
-      setExample(result.example);
-      setAiStatus('AI explanation ready.');
     };
 
     explainWord();
@@ -154,10 +181,23 @@ function WordPanel({
     return () => {
       isCancelled = true;
     };
-  }, [word]);
+  }, [contextSentence, word]);
 
   const handleAddVocabulary = () => {
-    onAddVocabulary({ meaning, phonetic, example, note });
+    onAddVocabulary({
+      word: lemma || word || undefined,
+      originalForm:
+        lemma && word && lemma.toLowerCase() !== word.toLowerCase()
+          ? word
+          : undefined,
+      meaning,
+      partOfSpeech,
+      englishExplanation,
+      inflectionExplanation,
+      phonetic,
+      example,
+      note,
+    });
     setNote('');
   };
 
@@ -172,6 +212,12 @@ function WordPanel({
               <p className="mt-2 break-words text-3xl font-semibold text-slate-950">
                 {word}
               </p>
+              {lemma && lemma.toLowerCase() !== word.toLowerCase() ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  Base form: <span className="font-semibold text-slate-900">{lemma}</span>
+                  {inflectionExplanation ? ` · ${inflectionExplanation}` : ''}
+                </p>
+              ) : null}
             </div>
 
             <div className="border-t border-slate-200 pt-4">
@@ -286,7 +332,8 @@ function WordPanel({
             <button
               type="button"
               onClick={handleAddVocabulary}
-              className="inline-flex h-11 w-full items-center justify-center rounded-md border border-cyan-200 bg-white px-4 text-sm font-semibold text-cyan-700 shadow-sm transition hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              disabled={aiStatus === 'Looking up...'}
+              className="inline-flex h-11 w-full items-center justify-center rounded-md border border-cyan-200 bg-white px-4 text-sm font-semibold text-cyan-700 shadow-sm transition hover:bg-cyan-50 disabled:cursor-wait disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             >
               Add to Vocabulary
             </button>
