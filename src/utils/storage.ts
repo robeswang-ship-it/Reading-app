@@ -3,7 +3,7 @@ import type {
   FavoriteSentence,
   Folder,
   LibraryExport,
-  LibraryExportV3,
+  LibraryExportV4,
   Paragraph,
   Sentence,
   VocabularyItem,
@@ -133,7 +133,13 @@ export function isDocument(value: unknown): value is Document {
       (Array.isArray(value.paragraphs) && value.paragraphs.every(isParagraph))) &&
     typeof value.currentSentenceIndex === 'number' &&
     Number.isInteger(value.currentSentenceIndex) &&
-    (value.folderId === undefined || typeof value.folderId === 'string')
+    (value.folderId === undefined || typeof value.folderId === 'string') &&
+    (value.readCount === undefined ||
+      (typeof value.readCount === 'number' &&
+        Number.isInteger(value.readCount) &&
+        value.readCount >= 0)) &&
+    (value.lastOpenedAt === undefined ||
+      typeof value.lastOpenedAt === 'string')
   );
 }
 
@@ -145,7 +151,11 @@ function isFolder(value: unknown): value is Folder {
   return (
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
-    typeof value.createdAt === 'string'
+    typeof value.createdAt === 'string' &&
+    (value.parentId === undefined || typeof value.parentId === 'string') &&
+    (value.sortOrder === undefined ||
+      (typeof value.sortOrder === 'number' &&
+        Number.isInteger(value.sortOrder)))
   );
 }
 
@@ -201,7 +211,7 @@ export function isLibraryExport(value: unknown): value is LibraryExport {
     return Array.isArray(value.documents) && value.documents.every(isDocument);
   }
 
-  if (value.version === 2 || value.version === 3) {
+  if (value.version === 2 || value.version === 3 || value.version === 4) {
     return (
       Array.isArray(value.documents) &&
       value.documents.every(isDocument) &&
@@ -346,6 +356,8 @@ function normalizeDocument(document: Document): Document {
     paragraphs: normalizeParagraphs(document, sentences),
     title: document.title.trim() || 'Untitled Document',
     folderId: folderId || undefined,
+    readCount: Math.max(Math.trunc(document.readCount ?? 0), 0),
+    lastOpenedAt: document.lastOpenedAt?.trim() || undefined,
     currentSentenceIndex: Math.min(
       Math.max(document.currentSentenceIndex, 0),
       maxIndex,
@@ -357,7 +369,38 @@ function normalizeFolder(folder: Folder): Folder {
   return {
     ...folder,
     name: folder.name.trim() || 'Untitled Folder',
+    parentId: folder.parentId?.trim() || undefined,
+    sortOrder: Number.isInteger(folder.sortOrder)
+      ? Math.max(folder.sortOrder ?? 0, 0)
+      : 0,
   };
+}
+
+function normalizeFolders(folders: Folder[]): Folder[] {
+  const normalized = folders.map(normalizeFolder);
+  const folderById = new Map(normalized.map((folder) => [folder.id, folder]));
+
+  return normalized.map((folder) => {
+    const parentId = folder.parentId;
+
+    if (!parentId || parentId === folder.id || !folderById.has(parentId)) {
+      return { ...folder, parentId: undefined };
+    }
+
+    const visited = new Set([folder.id]);
+    let ancestorId: string | undefined = parentId;
+
+    while (ancestorId) {
+      if (visited.has(ancestorId)) {
+        return { ...folder, parentId: undefined };
+      }
+
+      visited.add(ancestorId);
+      ancestorId = folderById.get(ancestorId)?.parentId;
+    }
+
+    return folder;
+  });
 }
 
 function normalizeVocabularyItem(item: VocabularyItem): VocabularyItem {
@@ -385,7 +428,7 @@ function getStoredDocuments() {
 }
 
 function getStoredFolders() {
-  return readJsonArray(FOLDERS_KEY, isFolder);
+  return normalizeFolders(readJsonArray(FOLDERS_KEY, isFolder));
 }
 
 function getStoredVocabularyItems() {
@@ -545,28 +588,45 @@ export function renameDocument(id: string, title: string) {
 }
 
 export function moveDocumentToFolder(id: string, folderId?: string) {
+  const validFolderId = folderId && getStoredFolders().some((folder) => folder.id === folderId)
+    ? folderId
+    : undefined;
+
   writeJsonArray(
     DOCUMENTS_KEY,
     getStoredDocuments().map((document) =>
       document.id === id
-        ? normalizeDocument({ ...document, folderId: folderId || undefined })
+        ? normalizeDocument({ ...document, folderId: validFolderId })
         : document,
     ),
   );
 }
 
 export function getFolders(): Folder[] {
-  return sortByCreatedAtDesc(getStoredFolders().map(normalizeFolder));
+  return [...getStoredFolders()].sort(
+    (a, b) =>
+      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+      a.name.localeCompare(b.name, undefined, { numeric: true }),
+  );
 }
 
-export function createFolder(name: string) {
+export function createFolder(name: string, parentId?: string) {
+  const storedFolders = getStoredFolders();
+  const validParentId = parentId && storedFolders.some((folder) => folder.id === parentId)
+    ? parentId
+    : undefined;
+  const nextSortOrder = storedFolders
+    .filter((folder) => folder.parentId === validParentId)
+    .reduce((maximum, folder) => Math.max(maximum, folder.sortOrder ?? 0), -1) + 1;
   const folder: Folder = {
     id: generateDocumentId(),
     name: name.trim() || 'Untitled Folder',
     createdAt: new Date().toISOString(),
+    parentId: validParentId,
+    sortOrder: nextSortOrder,
   };
 
-  writeJsonArray(FOLDERS_KEY, [folder, ...getStoredFolders()]);
+  writeJsonArray(FOLDERS_KEY, normalizeFolders([folder, ...storedFolders]));
   return folder;
 }
 
@@ -586,18 +646,66 @@ export function renameFolder(id: string, name: string) {
 }
 
 export function deleteFolder(id: string) {
+  const folders = getStoredFolders();
+  const deletedFolder = folders.find((folder) => folder.id === id);
+  const fallbackParentId = deletedFolder?.parentId;
+
   writeJsonArray(
     FOLDERS_KEY,
-    getStoredFolders().filter((folder) => folder.id !== id),
+    normalizeFolders(
+      folders
+        .filter((folder) => folder.id !== id)
+        .map((folder) =>
+          folder.parentId === id
+            ? { ...folder, parentId: fallbackParentId }
+            : folder,
+        ),
+    ),
   );
   writeJsonArray(
     DOCUMENTS_KEY,
     getStoredDocuments().map((document) =>
       document.folderId === id
-        ? normalizeDocument({ ...document, folderId: undefined })
+        ? normalizeDocument({ ...document, folderId: fallbackParentId })
         : document,
     ),
   );
+}
+
+const READING_SESSION_GAP_MS = 30 * 60 * 1000;
+
+export function recordDocumentOpened(
+  id: string,
+  openedAt = new Date().toISOString(),
+) {
+  let updatedDocument: Document | null = null;
+  const openedAtMs = new Date(openedAt).getTime();
+  const nextDocuments = getStoredDocuments().map((document) => {
+    if (document.id !== id) {
+      return document;
+    }
+
+    const lastOpenedAtMs = document.lastOpenedAt
+      ? new Date(document.lastOpenedAt).getTime()
+      : Number.NaN;
+    const startsNewSession =
+      !Number.isFinite(lastOpenedAtMs) ||
+      !Number.isFinite(openedAtMs) ||
+      openedAtMs - lastOpenedAtMs >= READING_SESSION_GAP_MS;
+
+    updatedDocument = normalizeDocument({
+      ...document,
+      readCount: (document.readCount ?? 0) + (startsNewSession ? 1 : 0),
+      lastOpenedAt: openedAt,
+    });
+    return updatedDocument;
+  });
+
+  if (updatedDocument) {
+    writeJsonArray(DOCUMENTS_KEY, nextDocuments);
+  }
+
+  return updatedDocument;
 }
 
 export function getVocabularyItems(): VocabularyItem[] {
@@ -784,13 +892,16 @@ function mergeById<T extends { id: string }>(
 function mergeFoldersWithIdMap(existing: Folder[], imported: Folder[]) {
   const usedIds = new Set(existing.map((folder) => folder.id));
   const idMap = new Map<string, string>();
-  const importedFolders = imported.map((folder) => {
+  const importedFoldersWithOriginalParent = imported.map((folder) => {
     const normalizedFolder = normalizeFolder(folder);
 
     if (!usedIds.has(normalizedFolder.id)) {
       usedIds.add(normalizedFolder.id);
       idMap.set(folder.id, normalizedFolder.id);
-      return normalizedFolder;
+      return {
+        folder: normalizedFolder,
+        originalParentId: normalizedFolder.parentId,
+      };
     }
 
     const nextId = generateDocumentId();
@@ -798,13 +909,24 @@ function mergeFoldersWithIdMap(existing: Folder[], imported: Folder[]) {
     idMap.set(folder.id, nextId);
 
     return {
-      ...normalizedFolder,
-      id: nextId,
+      folder: {
+        ...normalizedFolder,
+        id: nextId,
+      },
+      originalParentId: normalizedFolder.parentId,
     };
   });
+  const importedFolders = normalizeFolders(
+    importedFoldersWithOriginalParent.map(({ folder, originalParentId }) => ({
+      ...folder,
+      parentId: originalParentId
+        ? idMap.get(originalParentId) ?? originalParentId
+        : undefined,
+    })),
+  );
 
   return {
-    folders: sortByCreatedAtDesc([...importedFolders, ...existing]),
+    folders: normalizeFolders([...importedFolders, ...existing]),
     idMap,
   };
 }
@@ -907,14 +1029,34 @@ export function importDocuments(documents: Document[]) {
   return nextDocuments;
 }
 
-export function exportDocuments(): LibraryExportV3 {
+export function exportDocuments(): LibraryExportV4 {
   return {
-    version: 3,
+    version: 4,
     exportedAt: new Date().toISOString(),
     documents: getDocuments(),
     folders: getFolders(),
     vocabularyItems: getVocabularyItems(),
     favoriteSentences: getFavoriteSentences(),
+  };
+}
+
+export function upgradeLibraryExport(
+  libraryExport: LibraryExport,
+): LibraryExportV4 {
+  return {
+    version: 4,
+    exportedAt: libraryExport.exportedAt,
+    documents: libraryExport.documents.map(normalizeDocument),
+    folders:
+      libraryExport.version === 1
+        ? []
+        : normalizeFolders(libraryExport.folders),
+    vocabularyItems:
+      libraryExport.version === 1
+        ? []
+        : libraryExport.vocabularyItems.map(normalizeVocabularyItem),
+    favoriteSentences:
+      libraryExport.version === 1 ? [] : libraryExport.favoriteSentences,
   };
 }
 
@@ -950,7 +1092,7 @@ export function replaceLibrary(libraryExport: LibraryExport) {
       DOCUMENTS_KEY,
       sortByCreatedAtDesc(libraryExport.documents.map(normalizeDocument)),
     );
-    writeJsonArray(FOLDERS_KEY, sortByCreatedAtDesc(folders));
+    writeJsonArray(FOLDERS_KEY, normalizeFolders(folders));
     writeJsonArray(
       VOCABULARY_KEY,
       sortByCreatedAtDesc(vocabularyItems),
@@ -965,7 +1107,11 @@ export function replaceLibrary(libraryExport: LibraryExport) {
 }
 
 export function importLibrary(libraryExport: LibraryExport) {
-  if (libraryExport.version === 2 || libraryExport.version === 3) {
+  if (
+    libraryExport.version === 2 ||
+    libraryExport.version === 3 ||
+    libraryExport.version === 4
+  ) {
     const folderMerge = mergeFoldersWithIdMap(
       getStoredFolders(),
       libraryExport.folders,

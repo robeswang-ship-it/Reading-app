@@ -28,6 +28,8 @@ type StateRow = {
   document_id: string;
   current_sentence_index: number;
   sentence_notes: unknown;
+  read_count: number;
+  last_opened_at: string | null;
   updated_at: string;
 };
 
@@ -93,7 +95,7 @@ export async function fetchSystemLibrary(
         supabase
           .from('user_system_document_states')
           .select(
-            'document_id, current_sentence_index, sentence_notes, updated_at',
+            'document_id, current_sentence_index, sentence_notes, read_count, last_opened_at, updated_at',
           )
           .eq('user_id', userId),
       ),
@@ -110,6 +112,8 @@ export async function fetchSystemLibrary(
     documentId: row.document_id,
     currentSentenceIndex: row.current_sentence_index,
     sentenceNotes: normalizeSentenceNotes(row.sentence_notes),
+    readCount: Math.max(row.read_count ?? 0, 0),
+    lastOpenedAt: row.last_opened_at ?? undefined,
     updatedAt: row.updated_at,
   }));
   const stateByDocumentId = new Map(
@@ -150,6 +154,8 @@ export async function fetchSystemLibrary(
           state?.currentSentenceIndex ?? 0,
           Math.max(sentences.length - 1, 0),
         ),
+        readCount: state?.readCount ?? 0,
+        lastOpenedAt: state?.lastOpenedAt,
         folderId: undefined,
         origin: 'system' as const,
         systemCollectionId: row.collection_id,
@@ -170,6 +176,8 @@ export async function saveSystemDocumentState(
       document_id: state.documentId,
       current_sentence_index: state.currentSentenceIndex,
       sentence_notes: state.sentenceNotes,
+      read_count: state.readCount,
+      last_opened_at: state.lastOpenedAt ?? null,
     },
     { onConflict: 'user_id,document_id' },
   );

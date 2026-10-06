@@ -1,10 +1,11 @@
-import type { LibraryExportV3 } from '../types';
+import type { LibraryExportV4 } from '../types';
 import {
   exportDocuments,
   getLocalLibraryModifiedAt,
   hasLocalLibraryData,
   isLibraryExport,
   replaceLibrary,
+  upgradeLibraryExport,
 } from '../utils/storage';
 import { supabase } from './supabaseClient';
 
@@ -24,7 +25,7 @@ type SyncMetadata = {
 };
 
 export type CloudLibrary = {
-  library: LibraryExportV3;
+  library: LibraryExportV4;
   revision: number;
   updatedAt: string;
 };
@@ -96,9 +97,9 @@ function getLocalLibraryOwner() {
   return window.localStorage.getItem(LOCAL_LIBRARY_OWNER_KEY);
 }
 
-function createEmptyLibrary(): LibraryExportV3 {
+function createEmptyLibrary(): LibraryExportV4 {
   return {
-    version: 3,
+    version: 4,
     exportedAt: new Date().toISOString(),
     documents: [],
     folders: [],
@@ -108,7 +109,7 @@ function createEmptyLibrary(): LibraryExportV3 {
 }
 
 function parseCloudLibrary(row: CloudLibraryRow): CloudLibrary {
-  if (!isLibraryExport(row.library_data) || row.library_data.version !== 3) {
+  if (!isLibraryExport(row.library_data)) {
     throw new CloudLibraryError(
       'Cloud library data is invalid or uses an unsupported version.',
       'INVALID_CLOUD_DATA',
@@ -116,7 +117,7 @@ function parseCloudLibrary(row: CloudLibraryRow): CloudLibrary {
   }
 
   return {
-    library: row.library_data,
+    library: upgradeLibraryExport(row.library_data),
     revision: row.revision,
     updatedAt: row.updated_at,
   };

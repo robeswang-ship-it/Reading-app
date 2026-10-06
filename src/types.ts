@@ -34,6 +34,8 @@ export type Document = {
   sentences: Sentence[];
   currentSentenceIndex: number;
   folderId?: string;
+  readCount?: number;
+  lastOpenedAt?: string;
   origin?: 'personal' | 'system';
   systemCollectionId?: string;
 };
@@ -42,6 +44,8 @@ export type Folder = {
   id: string;
   name: string;
   createdAt: string;
+  parentId?: string;
+  sortOrder?: number;
 };
 
 export type SystemCollection = {
@@ -56,6 +60,8 @@ export type SystemDocumentState = {
   documentId: string;
   currentSentenceIndex: number;
   sentenceNotes: Record<string, string>;
+  readCount: number;
+  lastOpenedAt?: string;
   updatedAt?: string;
 };
 
@@ -110,4 +116,17 @@ export type LibraryExportV3 = {
   favoriteSentences: FavoriteSentence[];
 };
 
-export type LibraryExport = LibraryExportV1 | LibraryExportV2 | LibraryExportV3;
+export type LibraryExportV4 = {
+  version: 4;
+  exportedAt: string;
+  documents: Document[];
+  folders: Folder[];
+  vocabularyItems: VocabularyItem[];
+  favoriteSentences: FavoriteSentence[];
+};
+
+export type LibraryExport =
+  | LibraryExportV1
+  | LibraryExportV2
+  | LibraryExportV3
+  | LibraryExportV4;

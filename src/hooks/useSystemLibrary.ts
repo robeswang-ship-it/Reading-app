@@ -108,6 +108,7 @@ export function useSystemLibrary(userId: string | undefined) {
         documentId,
         currentSentenceIndex: 0,
         sentenceNotes: {},
+        readCount: 0,
       };
       const nextState = { ...currentState, currentSentenceIndex };
 
@@ -130,6 +131,7 @@ export function useSystemLibrary(userId: string | undefined) {
         documentId,
         currentSentenceIndex: 0,
         sentenceNotes: {},
+        readCount: 0,
       };
       const sentenceNotes = { ...currentState.sentenceNotes };
 
