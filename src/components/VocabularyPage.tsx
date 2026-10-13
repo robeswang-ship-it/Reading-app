@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { VocabularyItem } from '../types';
 import { lookupWord } from '../services/aiService';
@@ -27,6 +27,8 @@ type VocabularyPageProps = {
 type ImportPreview = VocabularyImportResult & {
   fileName: string;
 };
+
+const VOCABULARY_PAGE_SIZE = 50;
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -62,6 +64,7 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     getVocabularyItems(),
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importStatus, setImportStatus] = useState('');
@@ -89,6 +92,26 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
         item.documentTitle.toLowerCase().includes(normalizedQuery),
     );
   }, [items, searchQuery]);
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredItems.length / VOCABULARY_PAGE_SIZE),
+  );
+  const paginatedItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * VOCABULARY_PAGE_SIZE;
+
+    return filteredItems.slice(
+      startIndex,
+      startIndex + VOCABULARY_PAGE_SIZE,
+    );
+  }, [currentPage, filteredItems]);
+  const firstVisibleItem =
+    filteredItems.length === 0
+      ? 0
+      : (currentPage - 1) * VOCABULARY_PAGE_SIZE + 1;
+  const lastVisibleItem = Math.min(
+    currentPage * VOCABULARY_PAGE_SIZE,
+    filteredItems.length,
+  );
   const existingWordKeys = useMemo(
     () => new Set(items.map((item) => item.word.toLocaleLowerCase())),
     [items],
@@ -102,6 +125,10 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
   );
   const previewExistingCount =
     (importPreview?.entries.length ?? 0) - previewNewEntries.length;
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, pageCount));
+  }, [pageCount]);
 
   const refreshItems = () => {
     setItems(getVocabularyItems());
@@ -295,6 +322,39 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     }
   };
 
+  const handlePageChange = (page: number) => {
+    setExpandedItemId(null);
+    setCurrentPage(Math.min(Math.max(page, 1), pageCount));
+  };
+
+  const paginationControls =
+    filteredItems.length > VOCABULARY_PAGE_SIZE ? (
+      <nav
+        aria-label="Vocabulary pages"
+        className="flex flex-wrap items-center justify-center gap-3"
+      >
+        <button
+          type="button"
+          onClick={() => handlePageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <span className="min-w-28 text-center text-sm text-slate-600">
+          Page {currentPage} of {pageCount}
+        </span>
+        <button
+          type="button"
+          onClick={() => handlePageChange(currentPage + 1)}
+          disabled={currentPage === pageCount}
+          className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+        </button>
+      </nav>
+    ) : null;
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -370,16 +430,28 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
             <input
               type="search"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setCurrentPage(1);
+                setExpandedItemId(null);
+              }}
               className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 md:max-w-md"
               placeholder="Search English or Chinese meaning"
             />
             <p className="text-sm text-slate-500">
               {filteredItems.length} / {items.length} words
+              {filteredItems.length > 0
+                ? ` · showing ${firstVisibleItem}–${lastVisibleItem}`
+                : ''}
             </p>
           </div>
           {importStatus ? (
             <p className="mt-3 text-sm text-slate-600">{importStatus}</p>
+          ) : null}
+          {paginationControls ? (
+            <div className="mt-4 border-t border-slate-200 pt-4">
+              {paginationControls}
+            </div>
           ) : null}
         </div>
 
@@ -466,7 +538,7 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
         <section className="mt-4">
           {filteredItems.length > 0 ? (
             <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              {filteredItems.map((item) => {
+              {paginatedItems.map((item) => {
                 const isExpanded = expandedItemId === item.id;
 
                 return (
@@ -663,6 +735,9 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
               </p>
             </div>
           )}
+          {paginationControls ? (
+            <div className="mt-4">{paginationControls}</div>
+          ) : null}
         </section>
       </div>
     </main>
