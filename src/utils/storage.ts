@@ -15,9 +15,11 @@ const DOCUMENTS_KEY = 'ai-intensive-reading:documents';
 const FOLDERS_KEY = 'ai-intensive-reading:folders';
 const VOCABULARY_KEY = 'ai-intensive-reading:vocabulary-items';
 const FAVORITES_KEY = 'ai-intensive-reading:favorite-sentences';
+const UNFILED_NAME_KEY = 'ai-intensive-reading:unfiled-name';
 const LIBRARY_MODIFIED_AT_KEY = 'ai-intensive-reading:library-modified-at';
 export const LIBRARY_CHANGED_EVENT = 'ai-intensive-reading:library-changed';
 let suppressLibraryChangeEvent = false;
+const DEFAULT_UNFILED_NAME = 'Unfiled';
 
 export function generateDocumentId() {
   return window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -57,6 +59,20 @@ function writeJsonArray<T>(storageKey: string, values: T[]) {
       }),
     );
   }
+}
+
+function markLibraryChanged(storageKey: string) {
+  if (suppressLibraryChangeEvent) {
+    return;
+  }
+
+  const modifiedAt = new Date().toISOString();
+  window.localStorage.setItem(LIBRARY_MODIFIED_AT_KEY, modifiedAt);
+  window.dispatchEvent(
+    new CustomEvent(LIBRARY_CHANGED_EVENT, {
+      detail: { storageKey, modifiedAt },
+    }),
+  );
 }
 
 function isSentence(value: unknown): value is Sentence {
@@ -227,7 +243,9 @@ export function isLibraryExport(value: unknown): value is LibraryExport {
       Array.isArray(value.vocabularyItems) &&
       value.vocabularyItems.every(isVocabularyItem) &&
       Array.isArray(value.favoriteSentences) &&
-      value.favoriteSentences.every(isFavoriteSentence)
+      value.favoriteSentences.every(isFavoriteSentence) &&
+      (value.unfiledName === undefined ||
+        typeof value.unfiledName === 'string')
     );
   }
 
@@ -619,6 +637,21 @@ export function getFolders(): Folder[] {
       (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
       a.name.localeCompare(b.name, undefined, { numeric: true }),
   );
+}
+
+export function getUnfiledName() {
+  return window.localStorage.getItem(UNFILED_NAME_KEY)?.trim() || DEFAULT_UNFILED_NAME;
+}
+
+export function renameUnfiled(name: string) {
+  const nextName = name.trim();
+
+  if (!nextName) {
+    return;
+  }
+
+  window.localStorage.setItem(UNFILED_NAME_KEY, nextName);
+  markLibraryChanged(UNFILED_NAME_KEY);
 }
 
 export function createFolder(name: string, parentId?: string) {
@@ -1188,6 +1221,7 @@ export function exportDocuments(): LibraryExportV4 {
     folders: getFolders(),
     vocabularyItems: getVocabularyItems(),
     favoriteSentences: getFavoriteSentences(),
+    unfiledName: getUnfiledName(),
   };
 }
 
@@ -1208,6 +1242,10 @@ export function upgradeLibraryExport(
         : libraryExport.vocabularyItems.map(normalizeVocabularyItem),
     favoriteSentences:
       libraryExport.version === 1 ? [] : libraryExport.favoriteSentences,
+    unfiledName:
+      libraryExport.version === 4
+        ? libraryExport.unfiledName?.trim() || DEFAULT_UNFILED_NAME
+        : DEFAULT_UNFILED_NAME,
   };
 }
 
@@ -1218,7 +1256,8 @@ export function hasLocalLibraryData() {
     library.documents.length > 0 ||
     library.folders.length > 0 ||
     library.vocabularyItems.length > 0 ||
-    library.favoriteSentences.length > 0
+    library.favoriteSentences.length > 0 ||
+    library.unfiledName !== DEFAULT_UNFILED_NAME
   );
 }
 
@@ -1251,6 +1290,12 @@ export function replaceLibrary(libraryExport: LibraryExport) {
     writeJsonArray(
       FAVORITES_KEY,
       sortByCreatedAtDesc(favoriteSentences),
+    );
+    window.localStorage.setItem(
+      UNFILED_NAME_KEY,
+      libraryExport.version === 4
+        ? libraryExport.unfiledName?.trim() || DEFAULT_UNFILED_NAME
+        : DEFAULT_UNFILED_NAME,
     );
   } finally {
     suppressLibraryChangeEvent = false;

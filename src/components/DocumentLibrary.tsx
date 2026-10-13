@@ -23,6 +23,7 @@ import {
   exportDocuments,
   generateDocumentId,
   getFavoriteSentences,
+  getUnfiledName,
   getVocabularyItems,
   importDocuments,
   importLibrary,
@@ -31,6 +32,7 @@ import {
   moveFolderToFolder,
   renameDocument,
   renameFolder,
+  renameUnfiled,
 } from '../utils/storage';
 
 type DraggedLibraryItem = {
@@ -132,6 +134,7 @@ function getDocumentGroupName(
   document: Document,
   folders: Folder[],
   systemCollections: SystemCollection[],
+  unfiledName: string,
 ) {
   if (document.origin === 'system') {
     return (
@@ -144,7 +147,7 @@ function getDocumentGroupName(
   const path = getFolderPath(document.folderId, folders);
   return path.length > 0
     ? path.map((folder) => folder.name).join(' / ')
-    : 'Unfiled';
+    : unfiledName;
 }
 
 function getFolderOptionLabel(folder: Folder, folders: Folder[]) {
@@ -211,7 +214,7 @@ function DocumentLibrary({
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState<'success' | 'error'>('success');
   const [draggedItem, setDraggedItem] = useState<DraggedLibraryItem | null>(null);
-  const initializedSystemExpansionRef = useRef(false);
+  const [unfiledName, setUnfiledName] = useState(() => getUnfiledName());
   const selectedFolder = navigationState.selectedView;
   const searchQuery = navigationState.searchQuery;
   const sortOption = navigationState.sortOption;
@@ -230,24 +233,9 @@ function DocumentLibrary({
   }, []);
 
   useEffect(() => {
-    if (
-      initializedSystemExpansionRef.current ||
-      systemCollections.length === 0
-    ) {
-      return;
-    }
+    setUnfiledName(getUnfiledName());
+  }, [documents, folders]);
 
-    initializedSystemExpansionRef.current = true;
-    onNavigationStateChange({
-      ...navigationState,
-      expandedSystemCollectionIds: [
-        ...new Set([
-          ...navigationState.expandedSystemCollectionIds,
-          ...systemCollections.map((collection) => collection.id),
-        ]),
-      ],
-    });
-  }, [navigationState, onNavigationStateChange, systemCollections]);
   const vocabularyItems = getVocabularyItems();
   const favoriteSentences = getFavoriteSentences();
   const vocabularyCountByDocument = useMemo(() => {
@@ -378,6 +366,18 @@ function DocumentLibrary({
 
     renameFolder(folder.id, folderName);
     onLibraryChange();
+    showStatus('success', 'Folder renamed.');
+  };
+
+  const handleRenameUnfiled = () => {
+    const folderName = window.prompt('Rename folder', unfiledName);
+
+    if (!folderName?.trim()) {
+      return;
+    }
+
+    renameUnfiled(folderName);
+    setUnfiledName(getUnfiledName());
     showStatus('success', 'Folder renamed.');
   };
 
@@ -955,22 +955,36 @@ function DocumentLibrary({
                 );
               })}
 
-              <button
-                type="button"
-                onClick={() => setNavigationState({ selectedView: 'unfiled' })}
+              <div
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
                   handleDropIntoFolder();
                 }}
-                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
-                  selectedFolder === 'unfiled'
-                    ? 'bg-cyan-50 font-semibold text-cyan-950'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
+                className="group flex items-center gap-1 rounded-md"
               >
-                Unfiled
-              </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNavigationState({ selectedView: 'unfiled' })
+                  }
+                  className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-left text-sm transition ${
+                    selectedFolder === 'unfiled'
+                      ? 'bg-cyan-50 font-semibold text-cyan-950'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title={unfiledName}
+                >
+                  {unfiledName}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRenameUnfiled}
+                  className="rounded-md px-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  Edit
+                </button>
+              </div>
 
               {renderFolderNodes(undefined)}
             </nav>
@@ -1059,6 +1073,7 @@ function DocumentLibrary({
                                 document,
                                 folders,
                                 systemCollections,
+                                unfiledName,
                               )}
                             </span>
                             {document.origin === 'system' ? (
@@ -1138,7 +1153,7 @@ function DocumentLibrary({
                               className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
                               aria-label={`Move ${document.title}`}
                             >
-                              <option value="">Unfiled</option>
+                              <option value="">{unfiledName}</option>
                               {folders.map((folder) => (
                                 <option key={folder.id} value={folder.id}>
                                   {getFolderOptionLabel(folder, folders)}

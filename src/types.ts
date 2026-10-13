@@ -127,6 +127,7 @@ export type LibraryExportV4 = {
   folders: Folder[];
   vocabularyItems: VocabularyItem[];
   favoriteSentences: FavoriteSentence[];
+  unfiledName?: string;
 };
 
 export type LibraryExport =
