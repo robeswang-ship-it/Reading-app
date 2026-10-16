@@ -68,6 +68,7 @@ export type SystemDocumentState = {
 export type VocabularyItem = {
   id: string;
   word: string;
+  entryType?: 'word' | 'phrase';
   originalForm?: string;
   documentId: string;
   documentTitle: string;

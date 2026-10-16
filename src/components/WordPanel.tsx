@@ -12,6 +12,7 @@ type WordPanelProps = {
       Pick<
         VocabularyItem,
         | 'word'
+        | 'entryType'
         | 'originalForm'
         | 'meaning'
         | 'partOfSpeech'
@@ -186,6 +187,7 @@ function WordPanel({
   const handleAddVocabulary = () => {
     onAddVocabulary({
       word: lemma || word || undefined,
+      entryType: 'word',
       originalForm:
         lemma && word && lemma.toLowerCase() !== word.toLowerCase()
           ? word

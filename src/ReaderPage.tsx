@@ -138,6 +138,10 @@ function ReaderPage({
   }, [selectedSentenceIndex]);
 
   useEffect(() => {
+    setVocabularyStatus('');
+  }, [selectedWord]);
+
+  useEffect(() => {
     setSelectedWord(null);
   }, [document.id]);
 
@@ -290,6 +294,7 @@ function ReaderPage({
       Pick<
         VocabularyItem,
         | 'word'
+        | 'entryType'
         | 'originalForm'
         | 'meaning'
         | 'partOfSpeech'
@@ -301,12 +306,15 @@ function ReaderPage({
       >
     >,
   ) => {
-    if (!selectedSentence || !selectedWord) {
-      return;
+    const vocabularyText = details.word || selectedWord;
+
+    if (!selectedSentence || !vocabularyText) {
+      return { added: false, item: null };
     }
 
     const result = addVocabularyItem({
-      word: details.word || selectedWord,
+      word: vocabularyText,
+      entryType: details.entryType ?? 'word',
       originalForm: details.originalForm,
       documentId: document.id,
       documentTitle: document.title,
@@ -321,9 +329,13 @@ function ReaderPage({
       note: details.note,
     });
 
-    setVocabularyStatus(
-      result.added ? 'Saved to vocabulary.' : 'Already in vocabulary.',
-    );
+    if (details.entryType !== 'phrase') {
+      setVocabularyStatus(
+        result.added ? 'Saved successfully.' : 'Already in vocabulary.',
+      );
+    }
+
+    return result;
   };
 
   const handleSaveSentenceNotes = (fields: {

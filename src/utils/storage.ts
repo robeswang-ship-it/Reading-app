@@ -184,6 +184,9 @@ function isVocabularyItem(value: unknown): value is VocabularyItem {
   return (
     typeof value.id === 'string' &&
     typeof value.word === 'string' &&
+    (value.entryType === undefined ||
+      value.entryType === 'word' ||
+      value.entryType === 'phrase') &&
     (value.originalForm === undefined || typeof value.originalForm === 'string') &&
     typeof value.documentId === 'string' &&
     typeof value.documentTitle === 'string' &&
@@ -432,6 +435,7 @@ function normalizeVocabularyItem(item: VocabularyItem): VocabularyItem {
   return {
     ...item,
     word: item.word.trim(),
+    entryType: item.entryType === 'phrase' ? 'phrase' : 'word',
     originalForm: item.originalForm?.trim() || undefined,
     reviewCount: Math.max(item.reviewCount ?? 0, 0),
     familiarity: Math.min(Math.max(item.familiarity ?? 0, 0), 5),

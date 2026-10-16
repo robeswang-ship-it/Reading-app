@@ -29,6 +29,7 @@ type ImportPreview = VocabularyImportResult & {
 };
 
 const VOCABULARY_PAGE_SIZE = 50;
+type VocabularySortMode = 'newest' | 'oldest' | 'alphabetical' | 'random';
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -38,14 +39,30 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function getPrimaryMeaning(item: VocabularyItem) {
+function getCompactMeaning(item: VocabularyItem) {
   const meaning = item.meaning?.trim();
 
   if (!meaning || !/[\u3400-\u9fff]/.test(meaning)) {
     return 'No Chinese meaning yet';
   }
 
-  return meaning.split(/[;；]/)[0]?.trim() || meaning;
+  const meanings = meaning
+    .split(/[;；]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return meanings.length > 0 ? meanings.slice(0, 4).join('；') : meaning;
+}
+
+function getRandomRank(value: string, seed: number) {
+  let hash = seed | 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 16_777_619);
+  }
+
+  hash ^= hash >>> 16;
+  return hash >>> 0;
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -64,6 +81,8 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     getVocabularyItems(),
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<VocabularySortMode>('newest');
+  const [shuffleSeed, setShuffleSeed] = useState(() => Date.now());
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
@@ -81,17 +100,40 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
   const filteredItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    if (!normalizedQuery) {
-      return items;
-    }
-
-    return items.filter(
+    const matchingItems = !normalizedQuery ? items : items.filter(
       (item) =>
         item.word.toLowerCase().includes(normalizedQuery) ||
         item.meaning?.toLowerCase().includes(normalizedQuery) ||
         item.documentTitle.toLowerCase().includes(normalizedQuery),
     );
-  }, [items, searchQuery]);
+
+    return [...matchingItems].sort((left, right) => {
+      if (sortMode === 'alphabetical') {
+        return left.word.localeCompare(right.word, 'en', {
+          sensitivity: 'base',
+        });
+      }
+
+      if (sortMode === 'oldest') {
+        return (
+          new Date(left.createdAt).getTime() -
+          new Date(right.createdAt).getTime()
+        );
+      }
+
+      if (sortMode === 'random') {
+        return (
+          getRandomRank(left.id, shuffleSeed) -
+          getRandomRank(right.id, shuffleSeed)
+        );
+      }
+
+      return (
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime()
+      );
+    });
+  }, [items, searchQuery, shuffleSeed, sortMode]);
   const pageCount = Math.max(
     1,
     Math.ceil(filteredItems.length / VOCABULARY_PAGE_SIZE),
@@ -165,7 +207,11 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     setImportStatus('');
 
     try {
-      const result = await lookupWord(item.originalForm || item.word, item.sentenceText);
+      const result = await lookupWord(
+        item.originalForm || item.word,
+        item.sentenceText,
+        item.entryType ?? 'word',
+      );
       saveAiLookup(item, result);
       refreshItems();
       setImportStatus(`AI details updated for “${result.lemma || item.word}”.`);
@@ -200,6 +246,7 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
         const result = await lookupWord(
           item.originalForm || item.word,
           item.sentenceText,
+          item.entryType ?? 'word',
         );
         saveAiLookup(item, result);
         successCount += 1;
@@ -438,12 +485,46 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
               className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 md:max-w-md"
               placeholder="Search English or Chinese meaning"
             />
-            <p className="text-sm text-slate-500">
-              {filteredItems.length} / {items.length} words
-              {filteredItems.length > 0
-                ? ` · showing ${firstVisibleItem}–${lastVisibleItem}`
-                : ''}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={sortMode}
+                onChange={(event) => {
+                  const nextMode = event.target.value as VocabularySortMode;
+                  setSortMode(nextMode);
+                  if (nextMode === 'random') {
+                    setShuffleSeed(Date.now() + Math.random());
+                  }
+                  setCurrentPage(1);
+                  setExpandedItemId(null);
+                }}
+                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                aria-label="Vocabulary order"
+              >
+                <option value="newest">Newest saved</option>
+                <option value="oldest">Oldest saved</option>
+                <option value="alphabetical">Alphabetical A–Z</option>
+                <option value="random">Random</option>
+              </select>
+              {sortMode === 'random' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShuffleSeed(Date.now() + Math.random());
+                    setCurrentPage(1);
+                    setExpandedItemId(null);
+                  }}
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-800 shadow-sm transition hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+                >
+                  Shuffle again
+                </button>
+              ) : null}
+              <p className="text-sm text-slate-500">
+                {filteredItems.length} / {items.length} entries
+                {filteredItems.length > 0
+                  ? ` · showing ${firstVisibleItem}–${lastVisibleItem}`
+                  : ''}
+              </p>
+            </div>
           </div>
           {importStatus ? (
             <p className="mt-3 text-sm text-slate-600">{importStatus}</p>
@@ -553,15 +634,20 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
                       aria-expanded={isExpanded}
                       className="grid w-full grid-cols-[minmax(0,0.8fr)_minmax(0,1.7fr)_auto] items-center gap-4 px-4 py-3 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-cyan-500"
                     >
-                      <span className="truncate text-base font-semibold text-slate-950">
-                        {item.word}
+                      <span className="min-w-0 text-base font-semibold text-slate-950">
+                        <span className="break-words">{item.word}</span>
+                        {item.entryType === 'phrase' ? (
+                          <span className="ml-2 inline-flex rounded-full bg-violet-50 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                            Phrase
+                          </span>
+                        ) : null}
                       </span>
                       <span
-                        className={`truncate text-sm ${
+                        className={`break-words text-sm leading-5 ${
                           item.meaning ? 'text-slate-700' : 'text-slate-400'
                         }`}
                       >
-                        {getPrimaryMeaning(item)}
+                        {getCompactMeaning(item)}
                       </span>
                       <span className="text-sm text-slate-400" aria-hidden="true">
                         {isExpanded ? '▾' : '▸'}

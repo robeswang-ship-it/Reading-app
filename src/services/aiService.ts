@@ -284,21 +284,23 @@ Rules:
 export async function lookupWord(
   word: string,
   contextSentence?: string,
+  entryType: 'word' | 'phrase' = 'word',
 ): Promise<WordLookup> {
+  const isPhrase = entryType === 'phrase';
   const prompt = `You are an English dictionary assistant.
 
-Explain the following word for an English learner.
+Explain the following ${isPhrase ? 'phrase' : 'word'} for an English learner.
 
-Word:
+${isPhrase ? 'Phrase' : 'Word'}:
 "${word}"
 
 ${contextSentence ? `Context sentence:\n"${contextSentence}"` : 'No context sentence is available.'}
 
 Return valid JSON only:
 {
-  "lemma": "dictionary base form of the selected word",
-  "inflectionExplanation": "brief Chinese explanation of the selected form, or an empty string when it is already the base form",
-  "chineseMeaning": "中文释义",
+  "lemma": "${isPhrase ? 'the phrase exactly as supplied' : 'dictionary base form of the selected word'}",
+  "inflectionExplanation": "${isPhrase ? 'an empty string' : 'brief Chinese explanation of the selected form, or an empty string when it is already the base form'}",
+  "chineseMeaning": "当前语境义；其他常见义项",
   "partOfSpeech": "part of speech, e.g. noun / verb / adjective",
   "englishExplanation": "learner-friendly English explanation",
   "phonetic": "/phonetic/",
@@ -307,10 +309,12 @@ Return valid JSON only:
 
 Rules:
 - No extra text
-- lemma must be the correct dictionary headword: restore plurals, comparative forms, past tense, participles, and other inflections
+- ${isPhrase ? 'Keep lemma exactly equal to the supplied phrase; do not lemmatize or shorten it' : 'lemma must be the correct dictionary headword: restore plurals, comparative forms, past tense, participles, and other inflections'}
 - Use the context sentence to choose the correct lemma, part of speech, and meaning
-- inflectionExplanation must be Chinese, for example“过去式和过去分词”; use an empty string for an uninflected headword
-- Chinese meaning must be written in Chinese
+- ${isPhrase ? 'partOfSpeech must be "phrase" and inflectionExplanation must be an empty string' : 'inflectionExplanation must be Chinese, for example “过去式和过去分词”; use an empty string for an uninflected headword'}
+- Chinese meaning must be written in Chinese as a semicolon-separated list using Chinese semicolons（；）
+- Put the meaning used in the context sentence first, followed by 2-4 distinct, common meanings when they exist
+- Do not invent extra meanings merely to reach a fixed count
 - English explanation must be written in English
 - Keep explanation simple and useful
 - Example should be a natural English sentence

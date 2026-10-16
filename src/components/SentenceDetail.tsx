@@ -16,6 +16,7 @@ type SentenceDetailProps = {
       Pick<
         VocabularyItem,
         | 'word'
+        | 'entryType'
         | 'originalForm'
         | 'meaning'
         | 'partOfSpeech'
@@ -26,7 +27,7 @@ type SentenceDetailProps = {
         | 'note'
       >
     >,
-  ) => void;
+  ) => { added: boolean; item: VocabularyItem | null };
   onSelectWord: (word: string) => void;
   isSystemDocument?: boolean;
   showWordExplanation?: boolean;
@@ -56,6 +57,9 @@ function SentenceDetail({
   const [grammar, setGrammar] = useState('');
   const [userNote, setUserNote] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
+  const [phraseStatuses, setPhraseStatuses] = useState<Record<string, string>>(
+    {},
+  );
   const panelRef = useRef<HTMLElement | null>(null);
   const wordExplanationRef = useRef<HTMLElement | null>(null);
 
@@ -64,6 +68,7 @@ function SentenceDetail({
     setGrammar(sentence?.grammar ?? '');
     setUserNote(sentence?.userNote ?? '');
     setSaveStatus('');
+    setPhraseStatuses({});
   }, [sentence?.id, sentence?.grammar, sentence?.translation, sentence?.userNote]);
 
   useEffect(() => {
@@ -98,6 +103,28 @@ function SentenceDetail({
   const handleSaveNotes = () => {
     onSaveSentenceNotes({ translation, grammar, userNote });
     setSaveStatus('Saved.');
+  };
+
+  const handleAddPhrase = (
+    phrase: string,
+    explanation: string,
+    key: string,
+  ) => {
+    if (!onAddVocabulary) {
+      return;
+    }
+
+    const result = onAddVocabulary({
+      word: phrase,
+      entryType: 'phrase',
+      meaning: explanation,
+      partOfSpeech: 'phrase',
+    });
+
+    setPhraseStatuses((current) => ({
+      ...current,
+      [key]: result.added ? 'Saved successfully.' : 'Already in vocabulary.',
+    }));
   };
 
   return (
@@ -248,19 +275,45 @@ function SentenceDetail({
           </h3>
           {sentence?.keyPhrases?.length ? (
             <div className="mt-3 space-y-2">
-              {sentence.keyPhrases.map((item, index) => (
-                <div
-                  key={`${item.phrase}-${index}`}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-3"
-                >
-                  <p className="text-sm font-semibold text-slate-950">
-                    {item.phrase}
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    {item.explanation}
-                  </p>
-                </div>
-              ))}
+              {sentence.keyPhrases.map((item, index) => {
+                const phraseKey = `${item.phrase}-${index}`;
+
+                return (
+                  <div
+                    key={phraseKey}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-950">
+                        {item.phrase}
+                      </p>
+                      {onAddVocabulary ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleAddPhrase(
+                              item.phrase,
+                              item.explanation,
+                              phraseKey,
+                            )
+                          }
+                          className="inline-flex h-7 shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 px-2.5 text-xs font-semibold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+                        >
+                          Save
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      {item.explanation}
+                    </p>
+                    {phraseStatuses[phraseKey] ? (
+                      <p className="mt-2 text-xs font-medium text-emerald-700">
+                        {phraseStatuses[phraseKey]}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="mt-3 text-sm leading-6 text-slate-500">
