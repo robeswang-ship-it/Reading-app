@@ -67,13 +67,16 @@ function splitEntry(line: string): VocabularyImportEntry[] | null {
     ];
   }
 
+  const tokens = line.split(/\s+/).map(cleanWord);
+
+  if (
+    tokens.length > 1 &&
+    tokens.every((token) => SINGLE_WORD_PATTERN.test(token))
+  ) {
+    return tokens.map((word) => ({ word }));
+  }
+
   if (WORD_PATTERN.test(line)) {
-    const tokens = line.split(/\s+/).map(cleanWord);
-
-    if (tokens.length > 1 && tokens.every((token) => SINGLE_WORD_PATTERN.test(token))) {
-      return tokens.map((word) => ({ word }));
-    }
-
     return [{ word: cleanWord(line) }];
   }
 
