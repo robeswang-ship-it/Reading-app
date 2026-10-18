@@ -23,6 +23,13 @@ export type WordLookup = {
   example: string;
 };
 
+export type PhraseReview = {
+  phrase: string;
+  explanation: string;
+  isValid: boolean;
+  feedback: string;
+};
+
 type DeepSeekResponse = {
   choices?: Array<{
     message?: {
@@ -210,6 +217,21 @@ function isWordLookup(value: unknown): value is WordLookup {
   );
 }
 
+function isPhraseReview(value: unknown): value is PhraseReview {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'phrase' in value &&
+    'explanation' in value &&
+    'isValid' in value &&
+    'feedback' in value &&
+    typeof value.phrase === 'string' &&
+    typeof value.explanation === 'string' &&
+    typeof value.isValid === 'boolean' &&
+    typeof value.feedback === 'string'
+  );
+}
+
 export async function analyzeSentence(
   sentence: string,
 ): Promise<SentenceAnalysis> {
@@ -243,6 +265,15 @@ Rules:
 - The translation must be Chinese.
 - The grammar explanation must be written entirely in Chinese.
 - Extract 2-5 key phrases when available. Return [] if none.
+- Every keyPhrases.phrase must be the shortest complete, reusable dictionary-style expression, not a fragment copied from the sentence.
+- Remove optional context-specific subjects, objects, modifiers, purposes, reasons, times, manners, and trailing clauses.
+- Replace variable people, things, and actions with sb., sth., doing sth., or do sth. when that makes a reusable pattern.
+- Keep indispensable particles and prepositions that belong to the expression.
+- Extract only established expressions, collocations, idioms, phrasal verbs, or useful grammar/discourse markers; omit ordinary compositional fragments such as “as a defensive move”.
+- For a grammar or discourse marker such as “if only”, “even if”, “as if”, or “rather than”, return the marker itself and discard the clause or modifier that follows it.
+- Never turn a removable trailing modifier into sth. merely to keep it in the phrase.
+- Before returning each phrase, remove every word that is not required for the expression to remain complete and reusable.
+- Examples: “if only as a defensive move” -> “if only”; “raced to add such patents” -> “race to do sth.”; “add such patents to their files” -> “add sth. to one's files”; “beat them to the punch” -> “beat sb. to the punch”.
 - Extract 1-5 advanced vocabulary items when available. Return [] if none.
 - Phrase and vocabulary explanations must be written in Chinese.
 - Do not explain in English.
@@ -279,6 +310,69 @@ Rules:
     await delay(700);
     return mockSentenceAnalysis(sentence);
   }
+}
+
+export async function reviewPhrase(
+  candidate: string,
+  contextSentence: string,
+): Promise<PhraseReview> {
+  const prompt = `You edit English phrasebook entries for a Chinese learner.
+
+Candidate phrase:
+"${candidate}"
+
+Original context sentence:
+"${contextSentence}"
+
+Return valid JSON only:
+{
+  "phrase": "the corrected shortest reusable dictionary-style phrase",
+  "explanation": "准确、简洁的中文释义",
+  "isValid": true,
+  "feedback": "简短说明原输入是否正确，或你删改了什么"
+}
+
+Rules:
+- Decide whether the candidate itself is a complete, reusable phrase rather than a sentence fragment.
+- phrase must be the shortest form that preserves the fixed expression or useful grammatical pattern.
+- Remove optional context-specific subjects, objects, modifiers, purposes, reasons, times, manners, and trailing clauses.
+- Replace variable people, things, and actions with sb., sth., doing sth., or do sth. when useful.
+- Keep indispensable particles and prepositions.
+- First test whether a shorter expression at the beginning is independently useful. For grammar and discourse markers such as “if only”, “even if”, “as if”, and “rather than”, return the marker alone.
+- Never generalize an optional trailing modifier into sb., sth., or doing sth. merely to retain it. Placeholders are only for an argument required by the head verb or fixed pattern.
+- “if only as a defensive move” must return exactly “if only”, never “if only as sth.”.
+- isValid is true only when the candidate already has an appropriate phrasebook form; otherwise return the corrected form and false.
+- explanation must explain the returned phrase in Chinese, using the context sentence to choose the leading meaning.
+- feedback must be concise and written in Chinese.
+- Examples: “if only as a defensive move” -> “if only”; “raced to add such patents” -> “race to do sth.”; “beat them to the punch” -> “beat sb. to the punch”.
+- No extra text outside JSON.
+`;
+
+  const rawContent = await callDeepSeek(prompt);
+
+  if (!rawContent) {
+    throw new Error('DeepSeek phrase review failed');
+  }
+
+  const parsedContent: unknown = safeParseJSON(rawContent);
+
+  if (!isPhraseReview(parsedContent)) {
+    throw new Error('DeepSeek phrase review returned invalid data');
+  }
+
+  const phrase = parsedContent.phrase.trim();
+  const explanation = parsedContent.explanation.trim();
+
+  if (!phrase || !explanation) {
+    throw new Error('DeepSeek phrase review returned an empty result');
+  }
+
+  return {
+    phrase,
+    explanation,
+    isValid: parsedContent.isValid,
+    feedback: parsedContent.feedback.trim(),
+  };
 }
 
 export async function lookupWord(

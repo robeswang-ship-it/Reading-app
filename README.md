@@ -172,6 +172,7 @@ npm run preview
 
 5. Deploy.
 
-The app is frontend-only. Supabase is used for authentication only right now.
-User library data is still stored in each browser's `localStorage`, so this
-deployment does not require database tables or cloud sync.
+The app is frontend-only. Supabase provides authentication, synchronized personal
+library storage, and the shared system library. Browser `localStorage` remains a
+local cache and offline-safe fallback; the database migrations described above
+must be applied for cloud sync and shared content.

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { reviewPhrase } from '../services/aiService';
 import type { Sentence, VocabularyItem } from '../types';
 import WordPanel from './WordPanel';
 
@@ -60,6 +61,17 @@ function SentenceDetail({
   const [phraseStatuses, setPhraseStatuses] = useState<Record<string, string>>(
     {},
   );
+  const [phraseOverrides, setPhraseOverrides] = useState<
+    Record<string, { phrase: string; explanation: string }>
+  >({});
+  const [phraseReviewNotes, setPhraseReviewNotes] = useState<
+    Record<string, string>
+  >({});
+  const [editingPhraseKey, setEditingPhraseKey] = useState<string | null>(null);
+  const [draftPhrase, setDraftPhrase] = useState('');
+  const [reviewingPhraseKey, setReviewingPhraseKey] = useState<string | null>(
+    null,
+  );
   const panelRef = useRef<HTMLElement | null>(null);
   const wordExplanationRef = useRef<HTMLElement | null>(null);
 
@@ -69,6 +81,11 @@ function SentenceDetail({
     setUserNote(sentence?.userNote ?? '');
     setSaveStatus('');
     setPhraseStatuses({});
+    setPhraseOverrides({});
+    setPhraseReviewNotes({});
+    setEditingPhraseKey(null);
+    setDraftPhrase('');
+    setReviewingPhraseKey(null);
   }, [sentence?.id, sentence?.grammar, sentence?.translation, sentence?.userNote]);
 
   useEffect(() => {
@@ -125,6 +142,55 @@ function SentenceDetail({
       ...current,
       [key]: result.added ? 'Saved successfully.' : 'Already in vocabulary.',
     }));
+  };
+
+  const handleStartPhraseEdit = (key: string, phrase: string) => {
+    setEditingPhraseKey(key);
+    setDraftPhrase(phrase);
+    setPhraseReviewNotes((current) => ({ ...current, [key]: '' }));
+  };
+
+  const handleReviewPhrase = async (key: string) => {
+    const candidate = draftPhrase.trim();
+
+    if (!candidate || !sentence) {
+      setPhraseReviewNotes((current) => ({
+        ...current,
+        [key]: 'Please enter a phrase first.',
+      }));
+      return;
+    }
+
+    setReviewingPhraseKey(key);
+    setPhraseReviewNotes((current) => ({ ...current, [key]: '' }));
+
+    try {
+      const result = await reviewPhrase(candidate, sentence.text);
+
+      setPhraseOverrides((current) => ({
+        ...current,
+        [key]: {
+          phrase: result.phrase,
+          explanation: result.explanation,
+        },
+      }));
+      setPhraseReviewNotes((current) => ({
+        ...current,
+        [key]: result.isValid
+          ? `AI confirmed: ${result.feedback}`
+          : `AI corrected it: ${result.feedback}`,
+      }));
+      setPhraseStatuses((current) => ({ ...current, [key]: '' }));
+      setEditingPhraseKey(null);
+      setDraftPhrase('');
+    } catch {
+      setPhraseReviewNotes((current) => ({
+        ...current,
+        [key]: 'AI check failed. Please try again.',
+      }));
+    } finally {
+      setReviewingPhraseKey(null);
+    }
   };
 
   return (
@@ -277,35 +343,104 @@ function SentenceDetail({
             <div className="mt-3 space-y-2">
               {sentence.keyPhrases.map((item, index) => {
                 const phraseKey = `${item.phrase}-${index}`;
+                const phraseOverride = phraseOverrides[phraseKey];
+                const displayedPhrase = phraseOverride?.phrase ?? item.phrase;
+                const displayedExplanation =
+                  phraseOverride?.explanation ?? item.explanation;
+                const isEditing = editingPhraseKey === phraseKey;
+                const isReviewing = reviewingPhraseKey === phraseKey;
 
                 return (
                   <div
                     key={phraseKey}
                     className="rounded-lg border border-slate-200 bg-white px-3 py-3"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-950">
-                        {item.phrase}
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={draftPhrase}
+                          onChange={(event) => setDraftPhrase(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              void handleReviewPhrase(phraseKey);
+                            }
+                          }}
+                          autoFocus
+                          className="h-9 w-full rounded-md border border-violet-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                          aria-label="Edit phrase"
+                        />
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPhraseKey(null);
+                              setDraftPhrase('');
+                            }}
+                            disabled={isReviewing}
+                            className="inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleReviewPhrase(phraseKey)}
+                            disabled={isReviewing || !draftPhrase.trim()}
+                            className="inline-flex h-7 items-center justify-center rounded-md bg-violet-600 px-2.5 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:cursor-wait disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2"
+                          >
+                            {isReviewing ? 'Checking...' : 'Check with AI'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="min-w-0 text-sm font-semibold text-slate-950">
+                            {displayedPhrase}
+                          </p>
+                          {onAddVocabulary ? (
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleStartPhraseEdit(
+                                    phraseKey,
+                                    displayedPhrase,
+                                  )
+                                }
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm text-slate-500 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2"
+                                aria-label={`Edit ${displayedPhrase}`}
+                                title="Edit and check with AI"
+                              >
+                                ✎
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAddPhrase(
+                                    displayedPhrase,
+                                    displayedExplanation,
+                                    phraseKey,
+                                  )
+                                }
+                                className="inline-flex h-7 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 px-2.5 text-xs font-semibold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                          {displayedExplanation}
+                        </p>
+                      </>
+                    )}
+                    {phraseReviewNotes[phraseKey] ? (
+                      <p className="mt-2 text-xs leading-5 text-violet-700">
+                        {phraseReviewNotes[phraseKey]}
                       </p>
-                      {onAddVocabulary ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleAddPhrase(
-                              item.phrase,
-                              item.explanation,
-                              phraseKey,
-                            )
-                          }
-                          className="inline-flex h-7 shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 px-2.5 text-xs font-semibold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-                        >
-                          Save
-                        </button>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">
-                      {item.explanation}
-                    </p>
+                    ) : null}
                     {phraseStatuses[phraseKey] ? (
                       <p className="mt-2 text-xs font-medium text-emerald-700">
                         {phraseStatuses[phraseKey]}
