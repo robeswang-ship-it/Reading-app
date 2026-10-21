@@ -200,6 +200,8 @@ function isVocabularyItem(value: unknown): value is VocabularyItem {
       typeof value.lastReviewedAt === 'string') &&
     (value.familiarity === undefined ||
       typeof value.familiarity === 'number') &&
+    (value.inDirtyBasket === undefined ||
+      typeof value.inDirtyBasket === 'boolean') &&
     (value.meaning === undefined || typeof value.meaning === 'string') &&
     (value.partOfSpeech === undefined || typeof value.partOfSpeech === 'string') &&
     (value.englishExplanation === undefined ||
@@ -439,6 +441,7 @@ function normalizeVocabularyItem(item: VocabularyItem): VocabularyItem {
     originalForm: item.originalForm?.trim() || undefined,
     reviewCount: Math.max(item.reviewCount ?? 0, 0),
     familiarity: Math.min(Math.max(item.familiarity ?? 0, 0), 5),
+    inDirtyBasket: item.inDirtyBasket ? true : undefined,
     meaning: item.meaning?.trim() || undefined,
     partOfSpeech: item.partOfSpeech?.trim() || undefined,
     englishExplanation: item.englishExplanation?.trim() || undefined,
@@ -991,6 +994,8 @@ export function updateVocabularyDetails(
       phonetic: updatedItem.phonetic || duplicate.phonetic,
       example: updatedItem.example || duplicate.example,
       note: duplicate.note || updatedItem.note,
+      inDirtyBasket:
+        duplicate.inDirtyBasket || updatedItem.inDirtyBasket || undefined,
     });
 
     writeJsonArray(
@@ -1006,6 +1011,30 @@ export function updateVocabularyDetails(
     VOCABULARY_KEY,
     items.map((item) => (item.id === id ? updatedItem : item)),
   );
+}
+
+export function setVocabularyDirtyBasketStatus(
+  id: string,
+  inDirtyBasket: boolean,
+) {
+  let updatedItem: VocabularyItem | null = null;
+  const nextItems = getStoredVocabularyItems().map((item) => {
+    if (item.id !== id) {
+      return item;
+    }
+
+    updatedItem = normalizeVocabularyItem({
+      ...item,
+      inDirtyBasket: inDirtyBasket ? true : undefined,
+    });
+    return updatedItem;
+  });
+
+  if (updatedItem) {
+    writeJsonArray(VOCABULARY_KEY, nextItems);
+  }
+
+  return updatedItem;
 }
 
 export function deleteVocabularyItem(id: string) {

@@ -78,6 +78,7 @@ export type VocabularyItem = {
   reviewCount: number;
   lastReviewedAt?: string;
   familiarity: number;
+  inDirtyBasket?: boolean;
   meaning?: string;
   partOfSpeech?: string;
   englishExplanation?: string;

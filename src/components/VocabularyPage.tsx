@@ -8,6 +8,7 @@ import {
   deleteVocabularyItem,
   getVocabularyItems,
   importVocabularyItems,
+  setVocabularyDirtyBasketStatus,
   updateVocabularyDetails,
 } from '../utils/storage';
 import {
@@ -30,6 +31,7 @@ type ImportPreview = VocabularyImportResult & {
 
 const VOCABULARY_PAGE_SIZE = 50;
 type VocabularySortMode = 'newest' | 'oldest' | 'alphabetical' | 'random';
+type VocabularyViewMode = 'all' | 'dirtyBasket';
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -81,6 +83,7 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     getVocabularyItems(),
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<VocabularyViewMode>('all');
   const [sortMode, setSortMode] = useState<VocabularySortMode>('newest');
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now());
   const [currentPage, setCurrentPage] = useState(1);
@@ -97,10 +100,22 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     'word' | 'excel' | null
   >(null);
 
+  const dirtyBasketCount = useMemo(
+    () => items.filter((item) => item.inDirtyBasket).length,
+    [items],
+  );
+  const viewItems = useMemo(
+    () =>
+      viewMode === 'dirtyBasket'
+        ? items.filter((item) => item.inDirtyBasket)
+        : items,
+    [items, viewMode],
+  );
+
   const filteredItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    const matchingItems = !normalizedQuery ? items : items.filter(
+    const matchingItems = !normalizedQuery ? viewItems : viewItems.filter(
       (item) =>
         item.word.toLowerCase().includes(normalizedQuery) ||
         item.meaning?.toLowerCase().includes(normalizedQuery) ||
@@ -133,7 +148,7 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
         new Date(left.createdAt).getTime()
       );
     });
-  }, [items, searchQuery, shuffleSeed, sortMode]);
+  }, [searchQuery, shuffleSeed, sortMode, viewItems]);
   const pageCount = Math.max(
     1,
     Math.ceil(filteredItems.length / VOCABULARY_PAGE_SIZE),
@@ -269,6 +284,20 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
     deleteVocabularyItem(id);
     setExpandedItemId((current) => (current === id ? null : current));
     refreshItems();
+  };
+
+  const handleDirtyBasketStatus = (
+    item: VocabularyItem,
+    inDirtyBasket: boolean,
+  ) => {
+    setVocabularyDirtyBasketStatus(item.id, inDirtyBasket);
+    setExpandedItemId(null);
+    refreshItems();
+    setImportStatus(
+      inDirtyBasket
+        ? `Added “${item.word}” to the Dirty Basket.`
+        : `Removed “${item.word}” from the Dirty Basket. It remains in Vocabulary.`,
+    );
   };
 
   const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -473,6 +502,54 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
         </header>
 
         <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div
+            className="mb-4 inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1"
+            role="group"
+            aria-label="Vocabulary list"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('all');
+                setCurrentPage(1);
+                setExpandedItemId(null);
+              }}
+              aria-pressed={viewMode === 'all'}
+              className={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 ${
+                viewMode === 'all'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-950'
+              }`}
+            >
+              Vocabulary
+              <span className="ml-2 text-xs text-slate-500">{items.length}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('dirtyBasket');
+                setCurrentPage(1);
+                setExpandedItemId(null);
+              }}
+              aria-pressed={viewMode === 'dirtyBasket'}
+              className={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
+                viewMode === 'dirtyBasket'
+                  ? 'bg-white text-amber-800 shadow-sm'
+                  : 'text-slate-600 hover:text-amber-800'
+              }`}
+            >
+              Dirty Basket
+              <span
+                className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                  viewMode === 'dirtyBasket'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-slate-200 text-slate-600'
+                }`}
+              >
+                {dirtyBasketCount}
+              </span>
+            </button>
+          </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <input
               type="search"
@@ -519,7 +596,7 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
                 </button>
               ) : null}
               <p className="text-sm text-slate-500">
-                {filteredItems.length} / {items.length} entries
+                {filteredItems.length} / {viewItems.length} entries
                 {filteredItems.length > 0
                   ? ` · showing ${firstVisibleItem}–${lastVisibleItem}`
                   : ''}
@@ -641,6 +718,11 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
                             Phrase
                           </span>
                         ) : null}
+                        {viewMode === 'all' && item.inDirtyBasket ? (
+                          <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                            Dirty Basket
+                          </span>
+                        ) : null}
                       </span>
                       <span
                         className={`break-words text-sm leading-5 ${
@@ -685,11 +767,31 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDelete(item.id)}
-                              className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+                              onClick={() =>
+                                handleDirtyBasketStatus(
+                                  item,
+                                  !item.inDirtyBasket,
+                                )
+                              }
+                              className={`inline-flex h-9 items-center justify-center rounded-md border bg-white px-3 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                item.inDirtyBasket
+                                  ? 'border-amber-300 text-amber-800 hover:bg-amber-50 focus:ring-amber-500'
+                                  : 'border-slate-300 text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 focus:ring-amber-500'
+                              }`}
                             >
-                              Delete
+                              {item.inDirtyBasket
+                                ? 'Remove from Dirty Basket'
+                                : 'Add to Dirty Basket'}
                             </button>
+                            {viewMode === 'all' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(item.id)}
+                                className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+                              >
+                                Delete
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                         {item.originalForm || item.inflectionExplanation ? (
@@ -814,10 +916,18 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
           ) : (
             <div className="border-l-4 border-cyan-700 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-950">
-                No vocabulary items found
+                {viewMode === 'dirtyBasket'
+                  ? dirtyBasketCount === 0
+                    ? 'The Dirty Basket is empty'
+                    : 'No matching Dirty Basket entries'
+                  : 'No vocabulary items found'}
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Add words from the reader word panel or import a vocabulary file.
+                {viewMode === 'dirtyBasket'
+                  ? dirtyBasketCount === 0
+                    ? 'Open a word in Vocabulary and add it here for focused review.'
+                    : 'Try a different English word or Chinese meaning.'
+                  : 'Add words from the reader word panel or import a vocabulary file.'}
               </p>
             </div>
           )}
