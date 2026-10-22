@@ -20,6 +20,7 @@ import {
   exportVocabularyWord,
   getVocabularyExcelFileName,
 } from '../utils/vocabularyExport';
+import { pronounceEnglish } from '../utils/pronunciation';
 
 type VocabularyPageProps = {
   onBackToLibrary: () => void;
@@ -755,6 +756,14 @@ function VocabularyPage({ onBackToLibrary }: VocabularyPageProps) {
                             ) : null}
                           </div>
                           <div className="flex shrink-0 flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void pronounceEnglish(item.word)}
+                              className="inline-flex h-9 items-center justify-center rounded-md border border-cyan-200 bg-white px-3 text-sm font-semibold text-cyan-800 shadow-sm transition hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+                              aria-label={`Pronounce ${item.word}`}
+                            >
+                              Pronounce
+                            </button>
                             <button
                               type="button"
                               onClick={() => void handleAnalyzeItem(item)}
