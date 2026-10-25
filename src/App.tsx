@@ -5,8 +5,6 @@ import AuthPage from './components/AuthPage';
 import DocumentLibrary from './components/DocumentLibrary';
 import type { LibraryNavigationState } from './components/DocumentLibrary';
 import FavoritesPage from './components/FavoritesPage';
-import ReviewSentencesPage from './components/ReviewSentencesPage';
-import ReviewVocabularyPage from './components/ReviewVocabularyPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import TextImporter from './components/TextImporter';
 import VocabularyPage from './components/VocabularyPage';
@@ -34,9 +32,7 @@ type AppRoute =
   | 'create'
   | 'reader'
   | 'vocabulary'
-  | 'favorites'
-  | 'reviewVocabulary'
-  | 'reviewSentences';
+  | 'favorites';
 
 function App() {
   const [route, setRoute] = useState<AppRoute>('library');
@@ -257,18 +253,6 @@ function App() {
     return <FavoritesPage onBackToLibrary={() => setRoute('library')} />;
   }
 
-  if (route === 'reviewVocabulary') {
-    return (
-      <ReviewVocabularyPage onBackToLibrary={() => setRoute('library')} />
-    );
-  }
-
-  if (route === 'reviewSentences') {
-    return (
-      <ReviewSentencesPage onBackToLibrary={() => setRoute('library')} />
-    );
-  }
-
   return (
     <DocumentLibrary
       documents={[...systemLibrary.documents, ...documents]}
@@ -284,8 +268,6 @@ function App() {
       onOpenDocument={handleOpenDocument}
       onOpenFavorites={() => setRoute('favorites')}
       onOpenVocabulary={() => setRoute('vocabulary')}
-      onReviewSentences={() => setRoute('reviewSentences')}
-      onReviewVocabulary={() => setRoute('reviewVocabulary')}
       onRetryCloudSync={retryCloudSync}
       onSyncNow={uploadThisDevice}
       onOverwriteCloud={overwriteCloudWithThisDevice}

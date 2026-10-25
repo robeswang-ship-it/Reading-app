@@ -895,49 +895,6 @@ export function importVocabularyItems(entries: VocabularyImportEntry[]) {
   };
 }
 
-export function getVocabularyReviewQueue(): VocabularyItem[] {
-  const now = Date.now();
-
-  return [...getStoredVocabularyItems()].sort((a, b) => {
-    const aReviewedAt = a.lastReviewedAt
-      ? new Date(a.lastReviewedAt).getTime()
-      : 0;
-    const bReviewedAt = b.lastReviewedAt
-      ? new Date(b.lastReviewedAt).getTime()
-      : 0;
-    const aDaysSinceReview = (now - aReviewedAt) / 86_400_000;
-    const bDaysSinceReview = (now - bReviewedAt) / 86_400_000;
-    const aScore = (5 - a.familiarity) * 10 + aDaysSinceReview;
-    const bScore = (5 - b.familiarity) * 10 + bDaysSinceReview;
-
-    return bScore - aScore;
-  });
-}
-
-export function reviewVocabularyItem(id: string, remembered: boolean) {
-  let reviewedItem: VocabularyItem | null = null;
-
-  const nextItems = getStoredVocabularyItems().map((item) => {
-    if (item.id !== id) {
-      return item;
-    }
-
-    reviewedItem = {
-      ...item,
-      reviewCount: item.reviewCount + 1,
-      lastReviewedAt: new Date().toISOString(),
-      familiarity: remembered
-        ? Math.min(item.familiarity + 1, 5)
-        : Math.max(item.familiarity - 1, 0),
-    };
-
-    return reviewedItem;
-  });
-
-  writeJsonArray(VOCABULARY_KEY, nextItems);
-  return reviewedItem;
-}
-
 export function updateVocabularyNote(id: string, note: string) {
   writeJsonArray(
     VOCABULARY_KEY,

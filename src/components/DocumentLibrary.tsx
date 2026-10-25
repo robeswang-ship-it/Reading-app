@@ -66,8 +66,6 @@ type DocumentLibraryProps = {
   onOpenDocument: (document: Document) => void;
   onOpenFavorites: () => void;
   onOpenVocabulary: () => void;
-  onReviewSentences: () => void;
-  onReviewVocabulary: () => void;
   onRetryCloudSync: () => void;
   onSyncNow: () => void;
   onOverwriteCloud: () => void;
@@ -199,8 +197,6 @@ function DocumentLibrary({
   onOpenDocument,
   onOpenFavorites,
   onOpenVocabulary,
-  onReviewSentences,
-  onReviewVocabulary,
   onRetryCloudSync,
   onSyncNow,
   onOverwriteCloud,
@@ -746,75 +742,65 @@ function DocumentLibrary({
             </p>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-            <button
-              type="button"
-              onClick={onCreateDocument}
-              className="inline-flex h-10 items-center justify-center rounded-md bg-cyan-700 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              New Document
-            </button>
-            <button
-              type="button"
-              onClick={() => libraryInputRef.current?.click()}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              Import Library
-            </button>
-            <button
-              type="button"
-              onClick={handleExportLibrary}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              Export Library
-            </button>
-            <button
-              type="button"
-              onClick={() => documentInputRef.current?.click()}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              Import TXT / DOCX / PDF Files
-            </button>
-            <button
-              type="button"
-              onClick={onOpenVocabulary}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              Vocabulary
-            </button>
-            <button
-              type="button"
-              onClick={onReviewVocabulary}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              Review Vocabulary
-            </button>
-            <button
-              type="button"
-              onClick={onOpenFavorites}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              Favorites
-            </button>
-            <button
-              type="button"
-              onClick={onReviewSentences}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-            >
-              Review Sentences
-            </button>
-            <button
-              type="button"
-              onClick={onLogout}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
-            >
-              Logout
-            </button>
+          <div className="w-full lg:max-w-2xl">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <button
+                type="button"
+                onClick={onCreateDocument}
+                className="inline-flex h-10 items-center justify-center rounded-md bg-cyan-700 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              >
+                New Document
+              </button>
+              <button
+                type="button"
+                onClick={() => documentInputRef.current?.click()}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              >
+                Import Files
+              </button>
+              <button
+                type="button"
+                onClick={onOpenVocabulary}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              >
+                Vocabulary
+              </button>
+              <button
+                type="button"
+                onClick={onOpenFavorites}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              >
+                Favorites
+              </button>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <button
+                type="button"
+                onClick={handleExportLibrary}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-slate-50 px-4 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              >
+                Download Backup
+              </button>
+              <button
+                type="button"
+                onClick={() => libraryInputRef.current?.click()}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-slate-50 px-4 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              >
+                Restore Backup
+              </button>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="col-span-2 inline-flex h-10 items-center justify-center rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 sm:col-span-1"
+              >
+                Logout
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-slate-500 lg:text-right">
+              PDF import works best with selectable text. Scanned PDFs are not
+              supported yet.
+            </p>
           </div>
-          <p className="text-sm text-slate-500 lg:text-right">
-            PDF import works best with selectable-text PDFs. Scanned PDFs are
-            not supported yet.
-          </p>
         </header>
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
