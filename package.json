@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:writing-bank-seed": "node scripts/build-writing-bank-seed.mjs > supabase/migrations/20261026_writing_bank_seed.sql",
     "preview": "vite preview",
     "lint": "eslint ."
   },

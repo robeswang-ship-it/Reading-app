@@ -98,6 +98,68 @@ export type FavoriteSentence = {
   note?: string;
 };
 
+export type WritingItemType =
+  | 'phrase'
+  | 'sentence_pattern'
+  | 'example_sentence';
+
+export type WritingExampleReference = {
+  essayId: string;
+  sentenceId: string;
+  sentenceText: string;
+  translation: string;
+  bindings?: Record<string, string>;
+};
+
+export type WritingPhrase = {
+  id: string;
+  type: 'phrase';
+  text: string;
+  phraseType: 'verb_phrase' | 'noun_phrase' | 'other_phrase';
+  meaning: string;
+  optionalEnglishExplanation?: string;
+  tags: string[];
+  priority: 'P1' | 'P2' | 'P3';
+  usageNote?: string;
+  examples: WritingExampleReference[];
+};
+
+export type WritingSentencePattern = {
+  id: string;
+  type: 'sentence_pattern';
+  pattern: string;
+  function: string;
+  tags: string[];
+  grammarNote?: string;
+  usageNote?: string;
+  examples: WritingExampleReference[];
+};
+
+export type WritingExampleSentence = {
+  id: string;
+  type: 'example_sentence';
+  text: string;
+  translation: string;
+  tags: string[];
+  essayId: string;
+  sentenceId: string;
+  shortNote?: string;
+  relatedPhraseIds: string[];
+  relatedPatternIds: string[];
+};
+
+export type WritingItem =
+  | WritingPhrase
+  | WritingSentencePattern
+  | WritingExampleSentence;
+
+export type WritingItemState = {
+  itemId: string;
+  inFocusList: boolean;
+  note?: string;
+  updatedAt?: string;
+};
+
 export type LibraryExportV1 = {
   version: 1;
   exportedAt: string;

@@ -1,6 +1,6 @@
 # AI Intensive Reading
 
-A React + TypeScript + Vite + Tailwind CSS English intensive reading app with a local document library, reading modes, vocabulary/favorites, review flows, and optional DeepSeek-powered analysis.
+A React + TypeScript + Vite + Tailwind CSS English intensive reading app with a synchronized document library, reading modes, vocabulary/favorites, a shared writing bank, and optional DeepSeek-powered analysis.
 
 ## Features
 
@@ -9,12 +9,12 @@ A React + TypeScript + Vite + Tailwind CSS English intensive reading app with a 
 - Rule-based sentence splitting
 - Persistent last-read sentence position per document
 - Continuous full-text reader with extensive and intensive modes
-- Vocabulary book, favorite sentences, and review pages
-- Import/export library JSON and batch TXT import
+- Vocabulary book, favorite sentences, and a three-part writing bank
+- Library backup/restore and document batch import
 - Supabase email/password authentication
 - Password recovery with an in-app new-password form
 - Optional DeepSeek sentence and word analysis
-- No database tables or cloud sync yet
+- Supabase cloud sync and shared read-only system content
 
 ## Environment Variables
 
@@ -112,6 +112,33 @@ node scripts/build-system-library-seed.mjs \
 The checked-in migrations seed all 17 years into the shared `英语一`
 collection. Run them in filename order in the Supabase SQL Editor. Re-running
 them updates the same shared documents instead of creating duplicates.
+
+## Shared Writing Bank Setup
+
+Run these additional migrations in the Supabase SQL Editor, in order:
+
+```text
+supabase/migrations/20261026_writing_bank.sql
+supabase/migrations/20261026_writing_bank_seed.sql
+```
+
+The first migration creates shared read-only writing items and small per-user
+state rows. The second publishes 50 model essays in the System Library and
+publishes 240 phrases, 40 sentence patterns, and 100 selected example
+sentences in the Writing Bank. Shared content is stored once for all users;
+each account stores only its own Focus List membership and personal notes.
+
+The validated source data is checked in at:
+
+```text
+content/writing-bank/accumulation-v2.json
+```
+
+To rebuild the idempotent seed after a validated content update:
+
+```bash
+npm run build:writing-bank-seed
+```
 
 ## Local Development
 

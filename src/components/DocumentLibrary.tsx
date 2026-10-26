@@ -66,6 +66,7 @@ type DocumentLibraryProps = {
   onOpenDocument: (document: Document) => void;
   onOpenFavorites: () => void;
   onOpenVocabulary: () => void;
+  onOpenWritingBank: () => void;
   onRetryCloudSync: () => void;
   onSyncNow: () => void;
   onOverwriteCloud: () => void;
@@ -197,6 +198,7 @@ function DocumentLibrary({
   onOpenDocument,
   onOpenFavorites,
   onOpenVocabulary,
+  onOpenWritingBank,
   onRetryCloudSync,
   onSyncNow,
   onOverwriteCloud,
@@ -743,7 +745,7 @@ function DocumentLibrary({
           </div>
 
           <div className="w-full lg:max-w-2xl">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
               <button
                 type="button"
                 onClick={onCreateDocument}
@@ -771,6 +773,13 @@ function DocumentLibrary({
                 className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
               >
                 Favorites
+              </button>
+              <button
+                type="button"
+                onClick={onOpenWritingBank}
+                className="col-span-2 inline-flex h-10 items-center justify-center rounded-md border border-violet-300 bg-violet-50 px-4 text-sm font-semibold text-violet-800 shadow-sm transition hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 sm:col-span-1"
+              >
+                Writing Bank
               </button>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_auto]">

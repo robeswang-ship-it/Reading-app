@@ -8,11 +8,13 @@ import FavoritesPage from './components/FavoritesPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import TextImporter from './components/TextImporter';
 import VocabularyPage from './components/VocabularyPage';
+import WritingBankPage from './components/WritingBankPage';
 import type { Document, Folder } from './types';
 import { createDocumentStructure } from './utils/sentenceSplitter';
 import { supabase } from './services/supabaseClient';
 import { useCloudLibrarySync } from './hooks/useCloudLibrarySync';
 import { useSystemLibrary } from './hooks/useSystemLibrary';
+import { useWritingBank } from './hooks/useWritingBank';
 import {
   deleteDocument,
   generateDocumentId,
@@ -32,13 +34,17 @@ type AppRoute =
   | 'create'
   | 'reader'
   | 'vocabulary'
-  | 'favorites';
+  | 'favorites'
+  | 'writing';
 
 function App() {
   const [route, setRoute] = useState<AppRoute>('library');
   const [documents, setDocuments] = useState<Document[]>(() => getDocuments());
   const [folders, setFolders] = useState<Folder[]>(() => getFolders());
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
+  const [readerOrigin, setReaderOrigin] = useState<'library' | 'writing'>(
+    'library',
+  );
   const [libraryNavigation, setLibraryNavigation] =
     useState<LibraryNavigationState>({
       selectedView: 'all',
@@ -83,6 +89,10 @@ function App() {
     useCloudCopy,
   } = useCloudLibrarySync(session?.user.id, refreshLibrary);
   const systemLibrary = useSystemLibrary(session?.user.id);
+  const writingBank = useWritingBank(
+    session?.user.id,
+    route === 'writing',
+  );
 
   const handleCreateDocument = (title: string, sourceText: string) => {
     const { paragraphs, sentences } = createDocumentStructure(
@@ -112,7 +122,10 @@ function App() {
     return null;
   };
 
-  const handleOpenDocument = (document: Document) => {
+  const handleOpenDocument = (
+    document: Document,
+    origin: 'library' | 'writing' = 'library',
+  ) => {
     if (document.origin === 'system') {
       const nextState = systemLibrary.recordOpened(document.id);
       setActiveDocument({
@@ -126,6 +139,7 @@ function App() {
       refreshLibrary();
     }
 
+    setReaderOrigin(origin);
     setRoute('reader');
   };
 
@@ -146,10 +160,16 @@ function App() {
       selectedView: 'all',
       scrollY: 0,
     }));
+    setReaderOrigin('library');
     setRoute('library');
   };
 
   const handleBackToDocuments = () => {
+    if (readerOrigin === 'writing') {
+      setRoute('writing');
+      return;
+    }
+
     if (!activeDocument) {
       handleBackToLibrary();
       return;
@@ -238,6 +258,9 @@ function App() {
         document={activeDocument}
         onBackToDocuments={handleBackToDocuments}
         onBackToLibrary={handleBackToLibrary}
+        backToDocumentsLabel={
+          readerOrigin === 'writing' ? 'Back to Writing Bank' : undefined
+        }
         onDocumentChange={setActiveDocument}
         onSystemProgressChange={systemLibrary.updateProgress}
         onSystemSentenceNoteChange={systemLibrary.updateSentenceNote}
@@ -251,6 +274,29 @@ function App() {
 
   if (route === 'favorites') {
     return <FavoritesPage onBackToLibrary={() => setRoute('library')} />;
+  }
+
+  if (route === 'writing') {
+    return (
+      <WritingBankPage
+        items={writingBank.items}
+        essays={systemLibrary.documents}
+        stateByItemId={writingBank.stateByItemId}
+        view={writingBank.view}
+        onBackToLibrary={() => setRoute('library')}
+        onOpenEssay={(essayId) => {
+          const essay = systemLibrary.documents.find(
+            (document) => document.id === essayId,
+          );
+
+          if (essay) {
+            handleOpenDocument(essay, 'writing');
+          }
+        }}
+        onRetry={writingBank.reload}
+        onUpdateState={writingBank.updateState}
+      />
+    );
   }
 
   return (
@@ -268,6 +314,7 @@ function App() {
       onOpenDocument={handleOpenDocument}
       onOpenFavorites={() => setRoute('favorites')}
       onOpenVocabulary={() => setRoute('vocabulary')}
+      onOpenWritingBank={() => setRoute('writing')}
       onRetryCloudSync={retryCloudSync}
       onSyncNow={uploadThisDevice}
       onOverwriteCloud={overwriteCloudWithThisDevice}
