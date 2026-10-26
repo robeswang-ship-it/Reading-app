@@ -13,10 +13,13 @@ import { createDocumentStructure } from '../utils/sentenceSplitter';
 import {
   getFolderPath,
   getSystemCollectionView,
+  getSystemDocumentGroup,
   getSystemDocumentYear,
+  getSystemGroupView,
   getSystemYearView,
   parseSystemView,
 } from '../utils/libraryNavigation';
+import type { SystemDocumentGroup } from '../utils/libraryNavigation';
 import {
   createFolder,
   deleteFolder,
@@ -42,6 +45,16 @@ type DraggedLibraryItem = {
 
 export type FolderView = 'all' | 'unfiled' | string;
 export type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+
+const SYSTEM_GROUP_LABELS: Record<SystemDocumentGroup, string> = {
+  'mock-small': '模拟小作文',
+  'mock-large': '模拟大作文',
+};
+
+const SYSTEM_GROUP_ORDER: SystemDocumentGroup[] = [
+  'mock-small',
+  'mock-large',
+];
 
 export type LibraryNavigationState = {
   selectedView: FolderView;
@@ -274,6 +287,29 @@ function DocumentLibrary({
 
     return yearsByCollection;
   }, [documents, systemCollections]);
+  const systemGroupsByCollection = useMemo(() => {
+    const groupsByCollection = new Map<string, SystemDocumentGroup[]>();
+
+    for (const collection of systemCollections) {
+      const availableGroups = new Set(
+        documents
+          .filter(
+            (document) =>
+              document.origin === 'system' &&
+              document.systemCollectionId === collection.id,
+          )
+          .map(getSystemDocumentGroup)
+          .filter((group): group is SystemDocumentGroup => Boolean(group)),
+      );
+
+      groupsByCollection.set(
+        collection.id,
+        SYSTEM_GROUP_ORDER.filter((group) => availableGroups.has(group)),
+      );
+    }
+
+    return groupsByCollection;
+  }, [documents, systemCollections]);
   const childFoldersByParent = useMemo(() => {
     const children = new Map<string | undefined, Folder[]>();
 
@@ -311,7 +347,10 @@ function DocumentLibrary({
         return (
           document.origin === 'system' &&
           document.systemCollectionId === systemView.collectionId &&
-          (!systemView.year || getSystemDocumentYear(document) === systemView.year)
+          (!systemView.year ||
+            getSystemDocumentYear(document) === systemView.year) &&
+          (!systemView.group ||
+            getSystemDocumentGroup(document) === systemView.group)
         );
       }
 
@@ -886,6 +925,9 @@ function DocumentLibrary({
               {systemCollections.map((collection) => {
                 const collectionView = getSystemCollectionView(collection.id);
                 const years = systemYearsByCollection.get(collection.id) ?? [];
+                const groups =
+                  systemGroupsByCollection.get(collection.id) ?? [];
+                const hasChildren = years.length > 0 || groups.length > 0;
                 const isExpanded =
                   navigationState.expandedSystemCollectionIds.includes(
                     collection.id,
@@ -897,11 +939,11 @@ function DocumentLibrary({
                       <button
                         type="button"
                         onClick={() =>
-                          years.length > 0 &&
+                          hasChildren &&
                           toggleSystemCollectionExpanded(collection.id)
                         }
                         className={`h-8 w-6 shrink-0 rounded text-xs text-violet-600 hover:bg-violet-50 ${
-                          years.length > 0 ? '' : 'invisible'
+                          hasChildren ? '' : 'invisible'
                         }`}
                         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${collection.title}`}
                       >
@@ -922,29 +964,33 @@ function DocumentLibrary({
                       </button>
                     </div>
                     {isExpanded
-                      ? years.map((year) => {
-                          const yearView = getSystemYearView(
-                            collection.id,
-                            year,
-                          );
-
-                          return (
-                            <button
-                              key={year}
-                              type="button"
-                              onClick={() =>
-                                setNavigationState({ selectedView: yearView })
-                              }
-                              className={`ml-7 w-[calc(100%_-_1.75rem)] rounded-md px-3 py-2 text-left text-sm transition ${
-                                selectedFolder === yearView
-                                  ? 'bg-violet-50 font-semibold text-violet-950'
-                                  : 'text-slate-600 hover:bg-violet-50'
-                              }`}
-                            >
-                              {year}
-                            </button>
-                          );
-                        })
+                      ? [
+                          ...years.map((year) => ({
+                            key: `year:${year}`,
+                            label: year,
+                            view: getSystemYearView(collection.id, year),
+                          })),
+                          ...groups.map((group) => ({
+                            key: `group:${group}`,
+                            label: SYSTEM_GROUP_LABELS[group],
+                            view: getSystemGroupView(collection.id, group),
+                          })),
+                        ].map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() =>
+                              setNavigationState({ selectedView: item.view })
+                            }
+                            className={`ml-7 w-[calc(100%_-_1.75rem)] rounded-md px-3 py-2 text-left text-sm transition ${
+                              selectedFolder === item.view
+                                ? 'bg-violet-50 font-semibold text-violet-950'
+                                : 'text-slate-600 hover:bg-violet-50'
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        ))
                       : null}
                   </div>
                 );

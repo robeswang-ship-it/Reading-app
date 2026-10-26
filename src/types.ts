@@ -38,6 +38,7 @@ export type Document = {
   lastOpenedAt?: string;
   origin?: 'personal' | 'system';
   systemCollectionId?: string;
+  systemGroup?: 'mock-small' | 'mock-large';
 };
 
 export type Folder = {

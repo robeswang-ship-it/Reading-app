@@ -116,6 +116,12 @@ function buildDocument(essay, index) {
     throw new Error(`Paragraph mapping is incomplete in ${essay.title}.`);
   }
 
+  const systemGroup = /(?:19|20)\d{2}/.test(essay.title)
+    ? undefined
+    : essay.kind === 'chart_essay'
+      ? 'mock-large'
+      : 'mock-small';
+
   return {
     id: essay.id,
     title: essay.title,
@@ -130,6 +136,7 @@ function buildDocument(essay, index) {
       sentences,
       currentSentenceIndex: 0,
       origin: 'system',
+      ...(systemGroup ? { systemGroup } : {}),
     },
   };
 }
